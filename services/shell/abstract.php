@@ -105,7 +105,13 @@
 					}
 				}
 
-				return (isset($objectType)) ? ($this->_printInformations($objectType, $infos)) : (false);
+				if(isset($objectType)) {
+					$status = $this->_printInformations($objectType, $infos);
+					return array($status, $objectType, $infos);
+				}
+				else {
+					return false;
+				}
 			}
 			else {
 				return false;
@@ -134,11 +140,6 @@
 						if(array_key_exists($key, $item))
 						{
 							$field = $item[$key];
-
-							if(Tools::is('array', $field)) {
-								$field = implode(PHP_EOL, $field);
-							}
-
 							$field = vsprintf($format, $field);
 
 							switch($key)

@@ -160,7 +160,9 @@
 			}
 
 			if($subnet !== false) {
-				return (strpos($subnet, '.') !== false);
+				// Be careful ::ffff:127.0.0.1 notation is valid
+				//return (substr_count($subnet, '.') === 3 && strpos($subnet, ':') === false);
+				return Tools::is('ipv4', $subnet);
 			}
 			else {
 				return false;
@@ -174,7 +176,8 @@
 			}
 
 			if($subnet !== false) {
-				return (strpos($subnet, ':') !== false);
+				//return (strpos($subnet, ':') !== false);
+				return Tools::is('ipv6', $subnet);
 			}
 			else {
 				return false;

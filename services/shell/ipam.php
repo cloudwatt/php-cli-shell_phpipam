@@ -72,6 +72,8 @@
 				'netMask' => 'NET mask: %s',
 				'networkIP' => 'Network IP: %s',
 				'broadcastIP' => 'Broadcast IP: %s',
+				'firstIP' => 'First IP: %s',
+				'lastIP' => 'Last IP: %s',
 				'gateway' => 'Gateway: %s',
 				'vlanNumber' => 'VLAN ID: %d',
 				'vlanName' => 'VLAN Name: %s',
@@ -266,7 +268,15 @@
 				'address' => '_getAddressInfos'
 			);
 
-			return $this->_printObjectInfos($cases, $args, $fromCurrentPath);
+			$result = $this->_printObjectInfos($cases, $args, $fromCurrentPath);
+
+			if($result !== false) {
+				list($status, $objectType, $infos) = $result;
+				return $status;
+			}
+			else {
+				return false;
+			}
 		}
 
 		public function printSectionInfos(array $args, $fromCurrentPath = true)
@@ -497,14 +507,15 @@
 			foreach($subnets as $subnet)
 			{
 				$Ipam_Api_Subnet = new Ipam_Api_Subnet($subnet['id']);
+
+				if($IPv !== false && !$Ipam_Api_Subnet->{'isIPv'.$IPv}()) {
+					continue;
+				}
+
 				$Ipam_Api_Vlan = $Ipam_Api_Subnet->vlanApi;
 
 				$network = $Ipam_Api_Subnet->getNetwork();
 				$cidrMask = $Ipam_Api_Subnet->getCidrMask();
-
-				if($IPv !== false && !Ipam_Api_Subnet::{'isIPv'.$IPv.'Subnet'}($network)) {
-					continue;
-				}
 
 				$item = array();
 				$item['header'] = $network.'/'.$cidrMask;
@@ -513,8 +524,15 @@
 				$item['cidrMask'] = $cidrMask;
 				$item['netMask'] = $Ipam_Api_Subnet->getNetMask();
 				$item['gateway'] = $Ipam_Api_Subnet->getGateway();
-				$item['networkIP'] = $Ipam_Api_Subnet->getNetworkIp();
-				$item['broadcastIP'] = $Ipam_Api_Subnet->getBroadcastIp();
+
+				if($Ipam_Api_Subnet->isIPv4()) {
+					$item['networkIP'] = $Ipam_Api_Subnet->getNetworkIp();
+					$item['broadcastIP'] = $Ipam_Api_Subnet->getBroadcastIp();
+				}
+				elseif($Ipam_Api_Subnet->isIPv6()) {
+					$item['firstIP'] = $Ipam_Api_Subnet->getFirstIp();
+					$item['lastIP'] = $Ipam_Api_Subnet->getLastIp();
+				}
 
 				// Un subnet n'a pas forcément de VLAN
 				if($Ipam_Api_Vlan !== false) {

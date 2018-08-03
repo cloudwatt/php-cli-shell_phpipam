@@ -30,6 +30,7 @@
 			'show' => array(
 				'section', 'subnet', 'vlan', 'address',
 			),
+			'phpipam',
 		);
 
 		/**
@@ -59,7 +60,6 @@
 			'list address' => "#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.:* ]+)\"?$#i",
 			'show address' => "#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.:* ]+)\"?$#i",
 			// @todo regexp ipv6
-			'phpipam',
 		);
 
 		/**

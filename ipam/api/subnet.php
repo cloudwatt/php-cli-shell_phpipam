@@ -131,30 +131,24 @@
 			return false;
 		}
 
+		public function getFirstIp()
+		{
+			return IPAM_Tools::firstSubnetIp($this->getNetwork(), $this->getNetMask());
+		}
+
+		public function getLastIp()
+		{
+			return IPAM_Tools::lastSubnetIp($this->getNetwork(), $this->getNetMask());
+		}
+
 		public function getNetworkIp()
 		{
-			if($this->isIPv4()) {
-				return IPAM_Tools::networkIp($this->getNetwork(), $this->getNetMask());
-			}
-			elseif($this->isIPv6()) {
-				// @todo a coder
-			}
-			else {
-				return false;
-			}
+			return IPAM_Tools::networkIp($this->getNetwork(), $this->getNetMask());
 		}
 
 		public function getBroadcastIp()
 		{
-			if($this->isIPv4()) {
-				return IPAM_Tools::broadcastIp($this->getNetwork(), $this->getNetMask());
-			}
-			elseif($this->isIPv6()) {
-				// @todo a coder
-			}
-			else {
-				return false;
-			}
+			return IPAM_Tools::broadcastIp($this->getNetwork(), $this->getNetMask());
 		}
 
 		public function getGateway()
