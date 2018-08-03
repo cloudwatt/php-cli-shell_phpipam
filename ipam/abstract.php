@@ -27,8 +27,8 @@
 				}
 				else
 				{
-					$login = getenv('CW_IPAM_'.$server.'_LOGIN');
-					$password = getenv('CW_IPAM_'.$server.'_PASSWORD');
+					$login = getenv('IPAM_'.$server.'_LOGIN');
+					$password = getenv('IPAM_'.$server.'_PASSWORD');
 
 					if($login === false || $password === false) {
 						throw new Exception("Unable to retreive IPAM credentials for [".$server."] from env", E_USER_ERROR);
