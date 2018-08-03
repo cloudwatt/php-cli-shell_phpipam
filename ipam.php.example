@@ -1,0 +1,11 @@
+<?php
+	include_once('services/ipam.php');
+
+	/**
+	  * Change [IPAM_SERVER_KEY] with the key of your PHPIAPM server in configuration file
+	  * Example: $MAIN = new Service_Ipam(__DIR__ . '/config.json', 'myIpamKey');
+	  */
+	$MAIN = new Service_Ipam(__DIR__ . '/config.json', '[IPAM_SERVER_KEY]');
+
+	echo "\r\n";
+	exit();

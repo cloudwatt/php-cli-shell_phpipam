@@ -1,0 +1,19 @@
+{
+	"DEFAULT": {
+		"sys": {
+			"browserCmd": "xdg-open"
+		}	
+	},
+
+	"IPAM": {
+		"servers": {
+			"[IPAM_SERVER_KEY]": "https://myPatchManagerServerAddress.ext",
+			"myIpamKey": "https://demo.phpipam.net"
+		},
+
+		"contexts": {
+			"[IPAM_SERVER_KEY]": "myAPP",
+			"myIpamKey": "myAPP"
+		}
+	}
+}
