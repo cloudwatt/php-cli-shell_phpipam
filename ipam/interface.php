@@ -1,5 +1,5 @@
 <?php
-	interface IPAM_Interface	// /!\ Permets de garantir que l'ensemble des méthodes IPAM existent dans l'orchestrateur et le connecteur
+	interface IPAM_Interface	// /!\ Permet de garantir que l'ensemble des méthodes IPAM existent dans l'orchestrateur et le connecteur
 	{
 		public function getByEquipLabel($equipLabel, $IPv = 4);
 		public function getByEquipLabelVlanName($equipLabel, $vlanName, $IPv = 4);

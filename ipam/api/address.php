@@ -3,6 +3,7 @@
 	{
 		const OBJECT_TYPE = 'address';
 		const FIELD_NAME = 'hostname';
+		const FIELD_DESC = 'description';
 
 		const TAGS = array(
 			1 => 'offline',
@@ -93,6 +94,9 @@
 			switch($name)
 			{
 				case 'ip':
+				case 'address': {
+					return $this->_getField('ip', 'string&&!empty');
+				}
 				case 'hostname':
 				case 'description':
 				case 'tag':
@@ -133,18 +137,61 @@
 			return parent::__call($method, $parameters);
 		}
 
-		public static function searchIpAddresses($ip)
+		public function findIpAddresses($ip, $strict = false)
 		{
-			return self::$_IPAM->searchAddresses($ip);
+			return self::_searchIpAddresses($ip, $this->_IPAM, $strict);
 		}
 
-		public static function searchAddressNames($addressName)
+		public function findAddressNames($name, $strict = false)
 		{
-			return self::$_IPAM->searchAddHostname($addressName);
+			return self::_searchAddressNames($name, $this->_IPAM, $strict);
 		}
 
-		public static function searchAddressDescs($addressDesc)
+		public function findAddressDescs($desc, $strict = false)
 		{
-			return self::$_IPAM->searchAddDescription($addressDesc);
+			return self::_searchAddressDescs($desc, $this->_IPAM, $strict);
+		}
+
+		public static function searchIpAddresses($ip, $strict = false)
+		{
+			return self::_searchIpAddresses($ip, null, $strict);
+		}
+
+		public static function searchAddressNames($name, $strict = false)
+		{
+			return self::_searchAddressNames($name, null, $strict);
+		}
+
+		public static function searchAddressDescs($desc, $strict = false)
+		{
+			return self::_searchAddressDescs($desc, null, $strict);
+		}
+
+		// $strict for future use
+		protected static function _searchIpAddresses($ip, IPAM_Main $IPAM = null, $strict = false)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			return $IPAM->searchAddresses($ip);
+		}
+
+		protected static function _searchAddressNames($name, IPAM_Main $IPAM = null, $strict = false)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			return $IPAM->searchAddHostname($name, $strict);
+		}
+
+		protected static function _searchAddressDescs($desc, IPAM_Main $IPAM = null, $strict = false)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			return $IPAM->searchAddDescription($desc, $strict);
 		}
 	}

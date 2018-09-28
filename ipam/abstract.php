@@ -1,9 +1,9 @@
 <?php
-	include_once(__DIR__ . '/main.php');
-	include_once(__DIR__ . '/interface.php');
-	include_once(__DIR__ . '/connector/abstract.php');
-	include_once(__DIR__ . '/connector/sql.php');
-	include_once(__DIR__ . '/connector/rest.php');
+	require_once(__DIR__ . '/main.php');
+	require_once(__DIR__ . '/interface.php');
+	require_once(__DIR__ . '/connector/abstract.php');
+	require_once(__DIR__ . '/connector/sql.php');
+	require_once(__DIR__ . '/connector/rest.php');
 
 	abstract class IPAM_Abstract extends IPAM_Main implements IPAM_Interface
 	{
@@ -20,10 +20,10 @@
 				$server = mb_strtoupper($server);
 
 				if(!$config->servers->key_exists($server)) {
-					throw new Exception("Unable to retreive IPAM server @ ".$server, E_USER_ERROR);
+					throw new Exception("Unable to retreive IPAM server for '".$server."' from config", E_USER_ERROR);
 				}
 				elseif(!$config->contexts->key_exists($server)) {
-					throw new Exception("Unable to retreive IPAM context @ ".$server, E_USER_ERROR);
+					throw new Exception("Unable to retreive IPAM context for '".$server."' from config", E_USER_ERROR);
 				}
 				else
 				{
@@ -31,10 +31,10 @@
 					$password = getenv('IPAM_'.$server.'_PASSWORD');
 
 					if($login === false || $password === false) {
-						throw new Exception("Unable to retreive IPAM credentials for [".$server."] from env", E_USER_ERROR);
+						throw new Exception("Unable to retreive IPAM credentials for '".$server."' from env", E_USER_ERROR);
 					}
 
-					$this->_aIPAM[$server] = new IPAM_Connector_Rest($config->servers[$server], $config->contexts[$server], $login, $password, $printInfoMessages);
+					$this->_aIPAM[$server] = new IPAM_Connector_Rest($server, $config->servers[$server], $config->contexts[$server], $login, $password, $printInfoMessages);
 				}
 			}
 
@@ -79,6 +79,7 @@
 			foreach($this->_aIPAM as $IPAM) {
 				$result = $IPAM->getVlanNamesByVlanIds($vlanIds, $environments);
 				$vlanNames = array_merge($vlanNames, $result);
+				// @todo array_unique ??
 			}
 
 			return $vlanNames;
@@ -121,6 +122,11 @@
 			throw new Exception('Impossible de retourner le service IPAM adapté', E_USER_ERROR);
 		}
 
+		public function getAllIpam()
+		{
+			return $this->_aIPAM;
+		}
+
 		/*public function __call($name, array $arguments)
 		{
 			if($this->_oIPAM !== null) {
@@ -158,6 +164,8 @@
 						return $this->_aIPAM['CORP'];
 					case 'dev':
 						return $this->_aIPAM['DEV'];
+					case 'all':
+						return $this->_aIPAM;
 				}
 			}
 

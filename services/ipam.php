@@ -1,21 +1,21 @@
 <?php
-	include_once('abstract.php');
-	include_once('shell/ipam.php');
-	include_once(__DIR__ . '/../classes/rest.php');
-	include_once(__DIR__ . '/../ipam/abstract.php');
-	include_once(__DIR__ . '/../ipam/api/abstract.php');
-	include_once(__DIR__ . '/../ipam/api/section.php');
-	include_once(__DIR__ . '/../ipam/api/subnet/abstract.php');
-	include_once(__DIR__ . '/../ipam/api/folder.php');
-	include_once(__DIR__ . '/../ipam/api/subnet.php');
-	include_once(__DIR__ . '/../ipam/api/vlan.php');
-	include_once(__DIR__ . '/../ipam/api/address.php');
+	require_once('browser.php');
+	require_once('shell/ipam.php');
+	require_once(__DIR__ . '/../classes/rest.php');
+	require_once(__DIR__ . '/../ipam/abstract.php');
+	require_once(__DIR__ . '/../ipam/api/abstract.php');
+	require_once(__DIR__ . '/../ipam/api/section.php');
+	require_once(__DIR__ . '/../ipam/api/subnet/abstract.php');
+	require_once(__DIR__ . '/../ipam/api/folder.php');
+	require_once(__DIR__ . '/../ipam/api/subnet.php');
+	require_once(__DIR__ . '/../ipam/api/vlan.php');
+	require_once(__DIR__ . '/../ipam/api/address.php');
 
 	class IPAM extends IPAM_Abstract {}
 
 	class SHELL extends Shell_Abstract {}
 
-	class Service_Ipam extends Service_Abstract
+	class Service_Ipam extends Service_Abstract_Browser
 	{
 		const SHELL_HISTORY_FILENAME = '.ipam.history';
 
@@ -42,15 +42,16 @@
 		  */
 		protected $_inlineArgCmds = array(
 			'cdautocomplete' => array(0 => array('enable', 'en', 'disable', 'dis')),
-			'ls' => "#^\"?([a-z0-9\-_.: /~]+)\"?$#i",
-			'll' => "#^\"?([a-z0-9\-_. /~]+)\"?$#i",
-			'cd' => "#^\"?([a-z0-9\-_. /~]+)\"?$#i",
+			'ls' => "#^\"?([a-z0-9\-_.: /\#~]+)\"?$#i",												// / pour path, # pour #IPv4 ou #Ipv6
+			'll' => "#^\"?([a-z0-9\-_.: /\#~]+)\"?$#i",												// / pour path, # pour #IPv4 ou #Ipv6
+			'cd' => "#^\"?([a-z0-9\-_. /\#~]+)\"?$#i",												// / pour path, # pour #IPv4 ou #Ipv6
 			'find' => array(
 				0 => "#^\"?([a-z0-9\-_. /~]+)\"?$#i",
 				1 => array('all', 'subnet', 'vlan', 'address'),
 				2 => "#^\"?([a-z0-9\-_.:* /\#]+)\"?$#i"),											// * pour % SQL LIKE
 			'list section' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
 			'show section' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
+			//'list folder' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
 			//'show folder' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
 			'list subnet' => "#^\"?([a-z0-9\-_.: /\#]+)\"?$#i",										// : pour IPv6, / pour CIDR, # pour #IPv4 ou #Ipv6
 			'show subnet' => "#^\"?([a-z0-9\-_.: /\#]+)\"?$#i",										// : pour IPv6, / pour CIDR, # pour #IPv4 ou #Ipv6
@@ -82,6 +83,7 @@
 			'quit' => "Alias de exit",
 			'list' => "Affiche un type d'éléments; Dépend de la localisation actuelle. Utilisation: list [section|subnet|vlan|address] [object]",
 			'list section' => "Affiche les informations d'une section; Dépend de la localisation",
+			//'list folder' => "Affiche les informations d'un dossier; Dépend de la localisation",
 			'list subnet' => "Affiche les informations d'un sous réseau; Dépend de la localisation",
 			'list vlan' => "Affiche les informations d'un VLAN; Dépend de la localisation",
 			'list address' => "Affiche les informations d'une adresse IP; Dépend de la localisation. Utilisation: list address [ip|hostname|description]",
@@ -108,17 +110,16 @@
 			$this->_IPAM = $IPAM->getIpam();
 			Ipam_Api_Abstract::setIpam($this->_IPAM);
 
-			$this->_Service_Shell = new Service_Shell_Ipam($this);
+			$this->_Service_Shell = new Service_Shell_Ipam($this, $this->_SHELL);
 
 			if($autoInitialisation) {
 				$this->_init();
 			}
 		}
 
-		protected function _launchShell($welcomeMessage = true, $goodbyeMessage = true)
+		protected function _launchShell()
 		{
 			$exit = false;
-			$this->_preLauchingShell($welcomeMessage);
 
 			while(!$exit)
 			{
@@ -128,8 +129,6 @@
 				$exit = $this->_routeShellCmd($cmd, $args);
 				$this->_postRoutingShellCmd($cmd, $args);
 			}
-
-			$this->_postLauchingShell($goodbyeMessage);
 		}
 
 		protected function _routeShellCmd($cmd, array $args)
@@ -164,7 +163,10 @@
 					$status = $this->_Service_Shell->printSectionInfos($args, false);
 					break;
 				}
-				//case 'show folder':
+				/*case 'show folder': {
+					$status = $this->_Service_Shell->printFolderInfos($args, false);
+					break;
+				}*/
 				case 'show subnet': {
 					$status = $this->_Service_Shell->printSubnetInfos($args, false);
 					break;
@@ -193,10 +195,19 @@
 				}
 			}
 
-			if(isset($status) && !$status) {
-				$this->deleteWaitingMsg();
-				$msg = Tools::e($this->_manCommands[$cmd], 'red', false, false, true);
-				$this->_SHELL->printMessage($msg);
+			if(isset($status))
+			{
+				$this->_lastCmdStatus = $status;
+
+				if(!$status && !$this->_isOneShotCall)
+				{
+					if(array_key_exists($cmd, $this->_manCommands)) {
+						$this->error($this->_manCommands[$cmd], 'red');
+					}
+					else {
+						$this->error("Une erreur s'est produit lors de l'exécution de cette commande", 'red');
+					}
+				}
 			}
 
 			return $exit;
@@ -281,7 +292,6 @@
 							{
 								switch($objectClass)
 								{
-									case 'Ipam_Api_Folder':
 									case 'Ipam_Api_Subnet': {
 										$part = preg_replace('/(#IPv[46])$/i', '', $part);
 										break;

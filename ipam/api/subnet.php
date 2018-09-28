@@ -4,9 +4,14 @@
 		const OBJECT_TYPE = 'subnet';
 		const FIELD_NAME = 'description';
 
-		static protected $_subnets;
+		const USAGE_FIELDS = array(
+				'used' => 'used', 'total' => 'maxhosts', 'free' => 'freehosts', 'free%' => 'freehosts_percent',
+				'offline' => 'Offline_percent', 'used%' => 'Used_percent', 'reserved%' => 'Reserved_percent', 'dhcp%' => 'DHCP_percent'
+		);
 
-		protected $_vlanApi;
+		protected static $_subnets = array();
+
+		protected $_vlanApi = null;
 
 
 		public function subnetIdIsValid($subnetId)
@@ -204,6 +209,9 @@
 		{
 			switch($name)
 			{
+				case 'subnet': {
+					return $this->getSubnet();
+				}
 				case 'vlanApi': {
 					return $this->getVlanApi();
 				}
@@ -213,16 +221,36 @@
 			}
 		}
 
-		static protected function _getSubnets()
+		public function __call($method, $parameters = null)
 		{
-			if(self::$_subnets === null) {
-				self::$_subnets = self::$_IPAM->getAllSubnets();
+			switch($method)
+			{
+				case 'isIPv4':
+				case 'isIPv6':
+					$subnet = $this->_getField('subnet');
+					return forward_static_call(array(static::class, $method.'Subnet'), $subnet);
+				default:
+					return parent::__call($method, $parameters);
 			}
-			return self::$_subnets;
 		}
 
-		public static function searchCidrSubnets($cidrSubnet)
+		public function findCidrSubnets($cidrSubnet, $strict = false)
 		{
+			return self::_searchCidrSubnets($cidrSubnet, $this->_IPAM);
+		}
+
+		public static function searchCidrSubnets($cidrSubnet, $strict = false)
+		{
+			return self::_searchCidrSubnets($cidrSubnet, null, $strict);
+		}
+
+		// $strict for future use
+		protected static function _searchCidrSubnets($cidrSubnet, IPAM_Main $IPAM = null, $strict = false)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
 			if(self::isIPv4Subnet($cidrSubnet) && strpos($cidrSubnet, '/') !== false)
 			{
 				$cidrSubnet = IPAM_Tools::networkSubnet($cidrSubnet);
@@ -232,12 +260,64 @@
 				}
 			}
 
-			return self::$_IPAM->searchSubnets($cidrSubnet);
+			return $IPAM->searchSubnets($cidrSubnet);
 		}
 
-		public static function searchSubnetNames($subnetName)
+		public function findSubnetNames($subnetName, $strict = false)
+		{
+			$subnets = self::_getSubnets($this->_IPAM);
+			return self::_searchObjects($subnets, self::FIELD_NAME, $subnetName, $strict);
+		}
+
+		public static function searchSubnetNames($subnetName, $strict = false)
 		{
 			$subnets = self::_getSubnets();
-			return self::_searchObjects($subnets, self::FIELD_NAME, $subnetName);
+			return self::_searchObjects($subnets, self::FIELD_NAME, $subnetName, $strict);
+		}
+
+		protected static function _getSubnets(IPAM_Main $IPAM = null)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			$id = $IPAM->getServerId();
+
+			if(!array_key_exists($id, self::$_subnets)) {
+				self::$_subnets[$id] = $IPAM->getAllSubnets();
+			}
+
+			return self::$_subnets[$id];
+		}
+
+		public static function isIPv4Subnet($subnet)
+		{
+			if(Tools::is('array&&count>0', $subnet)) {
+				$subnet = $subnet['subnet'];
+			}
+
+			if($subnet !== false) {
+				// Be careful ::ffff:127.0.0.1 notation is valid
+				//return (substr_count($subnet, '.') === 3 && strpos($subnet, ':') === false);
+				return Tools::is('ipv4', $subnet);
+			}
+			else {
+				return false;
+			}
+		}
+
+		public static function isIPv6Subnet($subnet)
+		{
+			if(Tools::is('array&&count>0', $subnet)) {
+				$subnet = $subnet['subnet'];
+			}
+
+			if($subnet !== false) {
+				//return (strpos($subnet, ':') !== false);
+				return Tools::is('ipv6', $subnet);
+			}
+			else {
+				return false;
+			}
 		}
 	}

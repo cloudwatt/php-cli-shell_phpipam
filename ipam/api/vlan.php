@@ -4,9 +4,9 @@
 		const OBJECT_TYPE = 'vlan';
 		const FIELD_NAME = 'name';
 
-		static protected $_vlans;
+		protected static $_vlans = array();
 
-		protected $_subnets;
+		protected $_subnets = null;
 
 
 		public function vlanIdIsValid($vlanId)
@@ -79,22 +79,49 @@
 			}
 		}
 
-		static protected function _getVlans()
+		public function findVlanNumbers($vlanNumber)
 		{
-			if(self::$_vlans === null) {
-				self::$_vlans = self::$_IPAM->getAllVlans();
-			}
-			return self::$_vlans;
+			return self::_searchVlanNumbers($vlanNumber, $this->_IPAM);
 		}
 
 		public static function searchVlanNumbers($vlanNumber)
 		{
-			return self::$_IPAM->searchVlans($vlanNumber);
+			return self::_searchVlanNumbers($vlanNumber);
 		}
 
-		public static function searchVlanNames($vlanName)
+		protected static function _searchVlanNumbers($vlanNumber, IPAM_Main $IPAM = null)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			return $IPAM->searchVlans($vlanNumber);
+		}
+
+		public function findVlanNames($vlanName, $strict = false)
+		{
+			$vlans = self::_getVlans($this->_IPAM);
+			return self::_searchObjects($vlans, self::FIELD_NAME, $vlanName, $strict);
+		}
+
+		public static function searchVlanNames($vlanName, $strict = false)
 		{
 			$vlans = self::_getVlans();
-			return self::_searchObjects($vlans, self::FIELD_NAME, $vlanName);
+			return self::_searchObjects($vlans, self::FIELD_NAME, $vlanName, $strict);
+		}
+
+		protected static function _getVlans(IPAM_Main $IPAM = null)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			$id = $IPAM->getServerId();
+
+			if(!array_key_exists($id, self::$_vlans)) {
+				self::$_vlans[$id] = $IPAM->getAllVlans();
+			}
+
+			return self::$_vlans[$id];
 		}
 	}

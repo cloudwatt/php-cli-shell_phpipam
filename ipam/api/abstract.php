@@ -1,7 +1,10 @@
 <?php
 	abstract class Ipam_Api_Abstract
 	{
-		protected static $_IPAM = null;
+		protected static $_IPAM = null;			// Global IPAM (enabled)
+		protected static $_aIPAM = array();		// a = all/array/available IPAM
+
+		protected $_IPAM_ = null;				// Local IPAM (for this instance)
 
 		protected $_errorMessage = null;
 
@@ -14,6 +17,12 @@
 
 		public function __construct($objectId = null)
 		{
+			/**
+			  * Permet de garder la référence de l'IPAM actuellement activé
+			  * pour cette instance d'Ipam_Api_Abstract
+			  */
+			$this->_IPAM_ = self::$_IPAM;
+
 			if($this->objectIdIsValid($objectId)) {
 				$this->_objectId = (int) $objectId;
 				$this->objectExists();
@@ -123,15 +132,16 @@
 			}
 		}
 
-		static protected function _searchObjects(array $objects, $fieldName, $name)
+		protected static function _searchObjects(array $objects, $fieldName, $name, $strict = false)
 		{
 			$results = array();
 			$name = preg_quote($name, '#');
 			$name = str_replace('\*', '.*', $name);
+			$name = ($strict) ? ('^('.$name.')$') : ('('.$name.')');
 
 			foreach($objects as $object)
 			{
-				if(preg_match('#('.$name.')#i', $object[$fieldName])) {
+				if(preg_match('#'.$name.'#i', $object[$fieldName])) {
 					$results[] = $object;
 				}
 			}
@@ -143,9 +153,14 @@
 		{
 			switch(mb_strtolower($name))
 			{
+				case 'name':
+				case 'label': {
+					return $this->getObjectLabel();
+				}
 				case 'ipam':
-				case '_ipam': {
-					return self::$_IPAM;
+				case '_ipam':
+				case '_ipam_': {
+					return $this->_IPAM_;
 				}
 				default: {
 					throw new Exception("This attribute '".$name."' does not exist", E_USER_ERROR);
@@ -155,7 +170,7 @@
 
 		public function __call($method, $parameters = null)
 		{
-			throw new Exception('Method '.$method.' does not exist', E_USER_ERROR);
+			throw new Exception("Method '".$method."' does not exist", E_USER_ERROR);
 		}
 
 		public function getErrorMessage()
@@ -163,8 +178,52 @@
 			return $this->_errorMessage;
 		}
 
-		public static function setIpam(IPAM_Main $IPAM)
+		public static function setIpam($IPAM)
 		{
-			self::$_IPAM = $IPAM;
+			if($IPAM instanceof IPAM_Main) {
+				self::$_IPAM = $IPAM;
+				return true;
+			}
+			elseif(Tools::is('array&&count>0', $IPAM))
+			{
+				$check = true;
+
+				foreach($IPAM as $_IPAM)
+				{
+					if(!($_IPAM instanceof IPAM_Main)) {
+						$check = false;
+						break;
+					}
+				}
+
+				if($check) {
+					self::$_IPAM = current($IPAM);
+					self::$_aIPAM = $IPAM;
+					return true;
+				}
+			}
+
+			throw new Exception("Unable to set IPAM object(s), it is not IPAM_Main instance or an array of it", E_USER_ERROR);
+		}
+
+		public static function getIpam()
+		{
+			return (count(self::$_aIPAM) > 0) ? (self::$_aIPAM) : (self::$_IPAM);
+		}
+
+		public static function enableIpam($key)
+		{
+			if(array_key_exists($key, self::$_aIPAM)) {
+				self::$_IPAM = self::$_aIPAM[$key];
+				return true;
+			}
+			else {
+				return false;
+			}
+		}
+
+		public static function getIpamEnabled()
+		{
+			return self::$_IPAM->getServerId();
 		}
 	}

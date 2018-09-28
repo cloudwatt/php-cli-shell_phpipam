@@ -1,11 +1,13 @@
 <?php
-	include_once(__DIR__ . '/../classes/tools.php');
-	include_once(__DIR__ . '/../classes/config.php');
-	include_once(__DIR__ . '/../shell/abstract.php');
+	require_once(__DIR__ . '/../classes/tools.php');
+	require_once(__DIR__ . '/../classes/config.php');
+	require_once(__DIR__ . '/../shell/abstract.php');
 
 	abstract class Service_Abstract
 	{
 		const PHP_MIN_VERSION = '7.1.14';
+
+		const CLI_OPTION_DELIMITER = ';';
 
 		protected $_CONFIG;
 
@@ -30,16 +32,24 @@
 		  */
 		protected $_outlineArgCmds = array();
 
+		/**
+		  * /!\ Ordre important
+		  *
+		  * L'ordre des commandes ci-dessous sera respecté
+		  * afin que la configuration soit valide
+		  */
+		protected $_cliOptions = array();
+
+		protected $_cliToCmd = array();
+
 		protected $_manCommands = array();
 
-		protected $_cdautocomplete = true;
 		protected $_waitingMsgFeature = true;
+		protected $_waitingMsgState = false;
 
 		protected $_isOneShotCall = null;
 		protected $_lastCmdResult = null;
-
-		protected $_pathIds = null;
-		protected $_pathApi = null;
+		protected $_lastCmdStatus = null;
 
 		protected $_debug = false;
 
@@ -58,7 +68,8 @@
 				$this->_debug = (bool) $debug;
 			}
 
-			$this->_CONFIG = CONFIG::getInstance($configFilename);
+			$this->_CONFIG = CONFIG::getInstance();
+			$this->_CONFIG->loadConfigurations($configFilename, false);
 
 			$this->_SHELL = new SHELL($this->_commands, $this->_inlineArgCmds, $this->_outlineArgCmds, $this->_manCommands);
 			$this->_SHELL->debug($this->_debug)->setHistoryFilename(static::SHELL_HISTORY_FILENAME);
@@ -82,7 +93,11 @@
 		protected function _init()
 		{
 			$this->_oneShotCall();
+
+			$this->_preLauchingShell();
 			$this->_launchShell();
+			$this->_postLauchingShell();
+
 			return $this;
 		}
 
@@ -99,32 +114,26 @@
 		{
 			if($this->isOneShotCall())
 			{
-				$cmd = $_SERVER['argv'][1];
 				$this->waitingMsgFeature(false);
 				$this->_preLauchingShell(false);
 
-				$Shell_Autocompletion = new Shell_Autocompletion($this->_commands, $this->_inlineArgCmds, $this->_outlineArgCmds, $this->_manCommands);
-				$Shell_Autocompletion->debug($this->_debug);
-
-				$status = $Shell_Autocompletion->_($cmd);
-
-				if($status)
+				if($_SERVER['argc'] === 2)
 				{
-					$cmd = $Shell_Autocompletion->command;
-					$args = $Shell_Autocompletion->arguments;
+					$cmd = $_SERVER['argv'][1];
+					$status = $this->_routeCliCmdCall($cmd);
 
-					$this->_preRoutingShellCmd($cmd, $args);
-					$exit = $this->_routeShellCmd($cmd, $args);
-					$this->_postRoutingShellCmd($cmd, $args);
-
-					echo json_encode($this->_lastCmdResult);
-
-					$exitCode = 0;
+					if($status) {
+						echo json_encode($this->_lastCmdResult);
+						$exitCode = 0;
+					}
+					else {
+						$this->error("Commande invalide", 'red', false, 'bold');
+						$this->_SHELL->help();
+						$exitCode = 1;
+					}
 				}
 				else {
-					Tools::e("Commande invalide", 'red', false, 'bold');
-					$this->_SHELL->help();
-					$exitCode = 1;
+					$exitCode = $this->_dispatchCliCall();
 				}
 
 				$this->_postLauchingShell(false);
@@ -132,33 +141,103 @@
 			}
 		}
 
-		protected function _preLauchingShell($welcomeMessage = true)
+		protected function _dispatchCliCall()
 		{
-			$this->_moveToRoot();
+			$this->_isOneShotCall = false;
+			$this->waitingMsgFeature(true);
 
-			if($welcomeMessage) {
-				Tools::e(PHP_EOL.PHP_EOL."CTRL+C ferme le shell, utilisez ALT+C à la place", 'blue', false, 'italic');
-				Tools::e(PHP_EOL."Utilisez UP et DOWN afin de parcourir votre historique de commandes", 'blue', false, 'italic');
-				Tools::e(PHP_EOL."Utilisez TAB pour l'autocomplétion et ? afin d'obtenir davantage d'informations", 'blue', false, 'italic');
+			$options = getopt($this->_cliOptions['short'], $this->_cliOptions['long']);
+
+			// Permet de garantir l'ordre d'exécution des commandes
+			foreach($this->_cliOptions['long'] as $cli)
+			{
+				$cli = str_replace(':', '', $cli);
+
+				if(isset($options[$cli]))
+				{
+					$option = (array) $options[$cli];
+
+					foreach($option as $_option)
+					{
+						$status = $this->_cliOptToCmdArg($cli, $_option);
+
+						if(!$status) {
+							return 1;
+						}
+					}
+				}
+			}
+
+			return 0;
+		}
+
+		protected function _cliOptToCmdArg($cli, $option)
+		{
+			return 1;
+		}
+
+		protected function _routeCliCmdCall($cmd)
+		{
+			$Shell_Autocompletion = new Shell_Autocompletion($this->_commands, $this->_inlineArgCmds, $this->_outlineArgCmds, $this->_manCommands);
+			$Shell_Autocompletion->debug($this->_debug);
+
+			$status = $Shell_Autocompletion->_($cmd);
+
+			if($status)
+			{
+				$cmd = $Shell_Autocompletion->command;
+				$args = $Shell_Autocompletion->arguments;
+
+				$this->_preRoutingShellCmd($cmd, $args);
+				$this->_routeShellCmd($cmd, $args);
+				$this->_postRoutingShellCmd($cmd, $args);
+				return $this->_lastCmdStatus;
+			}
+			else {
+				return false;
 			}
 		}
 
-		abstract protected function _launchShell($welcomeMessage = true, $goodbyeMessage = true);
+		protected function _preLauchingShell($welcomeMessage = true)
+		{
+			if($welcomeMessage) {
+				$this->EOL();
+				$this->print("CTRL+C ferme le shell, utilisez ALT+C à la place", 'blue', false, 'italic');
+				$this->print("Utilisez UP et DOWN afin de parcourir votre historique de commandes", 'blue', false, 'italic');
+				$this->print("Utilisez TAB pour l'autocomplétion et ? afin d'obtenir davantage d'informations", 'blue', false, 'italic');
+				$this->EOL();
+			}
+		}
+
+		abstract protected function _launchShell();
 
 		protected function _postLauchingShell($goodbyeMessage = true)
 		{
 			if($goodbyeMessage) {
-				Tools::e(PHP_EOL.PHP_EOL."Merci d'avoir utilisé TOOLS-CLI by NOC", 'blue', false, 'italic');
+				$this->EOL();
+				$this->print("Merci d'avoir utilisé TOOLS-CLI by NOC", 'blue', false, 'italic');
+				$this->EOL();
 			}
 		}
 
-		protected function _preRoutingShellCmd($cmd, array &$args)
+		protected function _preRoutingShellCmd(&$cmd, array &$args)
 		{
+			/**
+			  * Dans certains cas, un espace peut être autocomplété à la fin de la commande afin de faciliter à l'utilisateur la CLI.
+			  * Exemple: show => array('host', 'subnet') --> "show " afin que l'utilisateur puisse poursuivre la commande
+			  *
+			  * Cependant, si l'on souhaite autoriser "show" comme commande valide alors il faut nettoyer l'autocompletion
+			  *
+			  * Ce traitement est à réaliser pour les commandes OneShot, CLI et SHELL.
+			  * De ce fait il ne faut pas le réaliser dans Shell_Abstract sinon les commandes OneShot ne seront pas nettoyées
+			  */
+			$cmd = rtrim($cmd, ' ');
+
 			foreach($args as &$arg) {
 				$arg = preg_replace('#^("|\')|("|\')$#i', '', $arg);
 			}
 
-			$this->displayWaitingMsg();
+			$this->displayWaitingMsg(false, false);
 		}
 
 		protected function _routeShellCmd($cmd, array $args)
@@ -166,98 +245,28 @@
 			switch($cmd)
 			{
 				case '': {
-					$this->deleteWaitingMsg();
-					Tools::e("Tape help for help !", 'blue');
-					break;
-				}
-				case 'ls':
-				case 'll':
-				{
-					$isPrinted = $this->_Service_Shell->printObjectInfos($args);
-
-					if(!$isPrinted) {
-						$path = (isset($args[0])) ? ($args[0]) : (null);
-						$this->_Service_Shell->printObjectsList($path);
-					}
-					break;
-				}
-				case 'cd':
-				{
-					if(isset($args[0]))
-					{
-						$path = $args[0];
-						$path = explode('/', $path);
-
-						if($path[0] === "" || $path[0] === '~') {
-							array_shift($path);
-							$this->_moveToRoot();
-						}
-
-						$this->_moveToPath($path);
-					}
-					else {
-						$this->_moveToRoot();
-					}
-
-					$this->deleteWaitingMsg();
-					break;
-				}
-				case 'pwd':
-				{
-					$currentPath = $this->_getCurrentPath();
-
-					$this->deleteWaitingMsg();
-					$this->e($currentPath, 'white');
-					$this->setLastCmdResult($currentPath);
-					break;
-				}
-				case 'cdautocomplete':
-				{
-					if(isset($args[0]))
-					{
-						switch($args[0])
-						{
-							case 'en':
-							case 'enable':
-								$this->_cdautocomplete = true;
-								break;
-							case 'dis':
-							case 'disable':
-								$this->_cdautocomplete = false;
-								break;
-						}
-					}
-					else {
-						$this->_cdautocomplete = !$this->_cdautocomplete;
-					}
-
-					if(!$this->_cdautocomplete) {
-						$this->_SHELL->setInlineArg('cd', $this->_inlineArgCmds['cd']);
-					}
-
-					$cdAutoCompleteStatut = ($this->_cdautocomplete) ? ('activée') : ('désactivée');
-
-					$this->deleteWaitingMsg();
-					Tools::e("L'autocomplétion de la commande CD est ".$cdAutoCompleteStatut, 'green');
+					$this->print("Tape help for help !", 'blue');
 					break;
 				}
 				case 'history': {
 					$this->deleteWaitingMsg();
 					$this->_SHELL->history();
+					$this->EOL();
 					break;
 				}
 				case 'help': {
 					$this->deleteWaitingMsg();
 					$this->_SHELL->help();
+					$this->EOL();
 					break;
 				}
 				case 'exit':
 				case 'quit': {
+					$this->deleteWaitingMsg();
 					return true;
 				}
 				default: {
-					$this->deleteWaitingMsg();
-					Tools::e("Commande inconnue... [".$cmd."]", 'red');
+					$this->error("Commande inconnue... [".$cmd."]", 'red');
 				}
 			}
 
@@ -266,58 +275,22 @@
 
 		protected function _postRoutingShellCmd($cmd, array $args) {}
 
-		protected function _setObjectAutocomplete(array $fields = null)
+		public function displayWaitingMsg($startEOL = true, $finishEOL = false, $infos = null)
 		{
-			if($this->_cdautocomplete && count($fields) > 0) {
-				$options = $this->_Service_Shell->getOptions();
-				$this->_SHELL->setInlineArg('cd', array(0 => $options));
-			}
-			else {
-				$this->_SHELL->setInlineArg('cd', $this->_inlineArgCmds['cd']);
-			}
-			return $this;
-		}
+			if($this->waitingMsgFeature() && !$this->_waitingMsgState)
+			{
+				/**
+				  * /!\ Ne pas inclure les sauts de lignes dans le traitement de la police
+				  * $infos ne doit pas contenir de saut de lignes sinon la desactivation ne fonctionnera pas complètement
+				  */
+				$message = ($startEOL) ? (PHP_EOL) : ('');
 
-		protected function _moveToRoot()
-		{
-			array_splice($this->_pathIds, 1);
-			array_splice($this->_pathApi, 1);
+				$message .= Tools::e("Veuillez patienter ...", 'orange', false, 'bold', true);
+				if($infos !== null) { $message .= Tools::e(' ('.$infos.')', 'orange', false, 'bold', true); }
 
-			$this->_Service_Shell->updatePath($this->_pathIds, $this->_pathApi);
-
-			$this->_setObjectAutocomplete();
-			$this->_SHELL->setShellPrompt('/');
-			return $this->_pathApi[0];
-		}
-
-		protected function _moveToPath($path)
-		{
-			$this->browser($this->_pathIds, $this->_pathApi, $path);
-			$this->_Service_Shell->updatePath($this->_pathIds, $this->_pathApi);
-
-			$this->_setObjectAutocomplete();
-			$currentPath = $this->_getCurrentPath();
-			$this->_SHELL->setShellPrompt($currentPath);
-
-			return end($this->_pathApi);
-		}
-
-		protected function _getCurrentPath()
-		{
-			$pathname = '/';
-
-			for($i=1; $i<count($this->_pathApi); $i++) {
-				$pathname .= $this->_pathApi[$i]->getObjectLabel().'/';
-			}
-
-			return $pathname;
-		}
-
-		public function displayWaitingMsg()
-		{
-			if($this->waitingMsgFeature()) {
-				$message = Tools::e("Veuillez patienter ...", 'orange', false, 'bold', true);
-				$this->_SHELL->printMessage($message);
+				if($finishEOL) { $message .= PHP_EOL; }
+				$this->_SHELL->insertMessage($message);
+				$this->_waitingMsgState = true;
 				return true;
 			}
 			else {
@@ -325,10 +298,11 @@
 			}
 		}
 
-		public function deleteWaitingMsg()
+		public function deleteWaitingMsg($lineUP = true)
 		{
-			if($this->waitingMsgFeature()) {
-				$this->_SHELL->deleteMessage();
+			if($this->waitingMsgFeature() && $this->_waitingMsgState) {
+				$this->_SHELL->deleteMessage(1, $lineUP);
+				$this->_waitingMsgState = false;
 				return true;
 			}
 			else {
@@ -350,9 +324,56 @@
 			return $this;
 		}
 
-		public function e($text, $textColor = false, $bgColor = false, $textStyle = false, $doNotPrint = false)
+		protected function _e($text, $textColor = false, $bgColor = false, $textStyle = false, $doNotPrint = false)
 		{
 			return ($this->_isOneShotCall) ? ($text) : (Tools::e($text, $textColor, $bgColor, $textStyle, $doNotPrint));
+		}
+
+		public function format($text, $textColor = 'green', $bgColor = false, $textStyle = false)
+		{
+			return $this->_e($text, $textColor, $bgColor, $textStyle, true);
+		}
+
+		public function EOL($multiplier = 1, $textColor = false, $bgColor = false, $textStyle = false, $autoDelWaitingMsg = true)
+		{
+			if($autoDelWaitingMsg) {
+				$this->deleteWaitingMsg();
+			}
+
+			$this->_e(str_repeat(PHP_EOL, $multiplier), $textColor, $bgColor, $textStyle, false);
+			return $this;	// /!\ Important
+		}
+
+		public function print($text, $textColor = 'green', $bgColor = false, $textStyle = false, $autoDelWaitingMsg = true)
+		{
+			if($autoDelWaitingMsg) {
+				$this->deleteWaitingMsg();
+			}
+
+			/** 
+			  * /!\ Ne doit pas être formaté comme le texte
+			  * /!\ Ne pas supprimer le message d'attente:
+			  * - Déjà traité dans cette méthode
+			  * - Si $autoDelWaitingMsg === false
+			  */
+			$this->EOL(1, false, false, false, false);
+			return $this->_e($text, $textColor, $bgColor, $textStyle, false);
+		}
+
+		public function error($text, $textColor = 'red', $bgColor = false, $textStyle = false, $autoDelWaitingMsg = true)
+		{
+			if($autoDelWaitingMsg) {
+				$this->deleteWaitingMsg();
+			}
+
+			/** 
+			  * /!\ Ne doit pas être formaté comme le texte
+			  * /!\ Ne pas supprimer le message d'attente:
+			  * - Déjà traité dans cette méthode
+			  * - Si $autoDelWaitingMsg === false
+			  */
+			$this->EOL(1, false, false, false, false);
+			return $this->_e($text, $textColor, $bgColor, $textStyle, false);
 		}
 
 		protected function _throwException(Exception $exception)

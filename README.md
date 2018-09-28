@@ -23,9 +23,9 @@ __Do not forget to install php7.1-curl__
 
 #### REPOSITORY
 * git clone https://github.com/cloudwatt/php-cli-shell_base
-* git checkout tags/v1.0
+* git checkout tags/v1.1
 * git clone https://github.com/cloudwatt/php-cli-shell_phpipam
-* git checkout tags/v1.0
+* git checkout tags/v1.1
 * Merge these two repositories
 
 #### CONFIGURATION FILE

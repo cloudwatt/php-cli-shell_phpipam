@@ -15,6 +15,7 @@
 			'prefix' => 'prefix',
 		);
 
+		protected $_id;
 		protected $_config;
 		protected $_server;
 		protected $_application;
@@ -23,8 +24,14 @@
 		protected $_debug = false;
 
 
-		public function __construct($server, $application, $login, $password, $printInfoMessages = true)
+		public function __construct($id, $server, $application, $login, $password, $printInfoMessages = true)
 		{
+			/**
+			  * Pourra servir plus tard pour sélectionner une configuration
+			  * différente en fonction de l'ID à partir de CONFIG
+			  */
+			$this->_id = $id;
+
 			$this->_config = CONFIG::getInstance()->IPAM;
 
 			if($printInfoMessages) {
@@ -91,6 +98,23 @@
 				default:
 					throw new Exception("L'adresse du serveur IPAM doit commencer par http ou https", E_USER_ERROR);
 			}
+		}
+
+		public function getServerId()
+		{
+			return $this->_id;
+		}
+
+		public function getServerUrl()
+		{
+			return preg_replace('#^(http(s)?://)#i', '', $this->_server);
+		}
+
+		public function getServerAdd()
+		{
+			$server = $this->getServerUrl;
+			$serverParts = explode('/', $server, 2);
+			return current($serverParts);
 		}
 
 		public function getWebUrl()
@@ -482,7 +506,7 @@
 			)
 			  */
 			return $this->_getSubnets($sectionId, false, true);
-			//return $this->_getSubnets($sectionId, "0", true);
+			//return $this->_getSubnets($sectionId, 0, true);
 		}
 
 		public function getFolders($sectionId, $folderId = false)
@@ -492,7 +516,7 @@
 
 		public function getFolder($folderId)
 		{
-			return $this->_getSubnet($folderId);
+			return $this->_getSubnet($folderId, true);
 		}
 
 		public function getAllSubnets()
@@ -528,7 +552,7 @@
 			)
 			  */
 			return $this->_getSubnets($sectionId, false, false);
-			//return $this->_getSubnets($sectionId, "0", false);
+			//return $this->_getSubnets($sectionId, 0, false);
 		}
 
 		public function getSubnets($sectionId, $subnetId = false)
@@ -538,33 +562,33 @@
 
 		public function getSubnet($subnetId)
 		{
-			return $this->_getSubnet($subnetId);
+			return $this->_getSubnet($subnetId, false);
 		}
 
-		protected function _getSubnets($sectionId, $subnetId = false, $isFolder = null)
+		protected function _getSubnets($sectionId, $subnetId, $isFolder)
 		{
-			if(Tools::is('int&&>0', $sectionId) && ($subnetId === false || Tools::is('int&&>0', $subnetId)))
+			if(Tools::is('int&&>0', $sectionId) && ($subnetId === false || Tools::is('int&&>=0', $subnetId)))
 			{
 				$subnets = $this->_restAPI->sections->{$sectionId}->subnets->get();
 				$subnets = $this->_getCallResponse($subnets);
 
 				if($subnets !== false)
 				{
-					if($subnetId !== false || $isFolder !== null)
+					if($subnetId === false && $isFolder === null) {
+						return $subnets;
+					}
+					else
 					{
 						$subSubnets = array();
 
 						foreach($subnets as $subnet)
 						{
-							if(($subnetId === false || $subnet['masterSubnetId'] === $subnetId) && (bool) $subnet['isFolder'] === $isFolder) {
+							if(($subnetId === false || (int) $subnet['masterSubnetId'] === $subnetId) && (bool) $subnet['isFolder'] === $isFolder) {
 								$subSubnets[] = $subnet;
 							}
 						}
 
 						return $subSubnets;
-					}
-					else {
-						return $subnets;
 					}
 				}
 			}
@@ -572,11 +596,17 @@
 			return false;
 		}
 
-		protected function _getSubnet($subnetId)
+		protected function _getSubnet($subnetId, $isFolder = false)
 		{
 			if(Tools::is('int&&>0', $subnetId))
 			{
-				$subnet = $this->_restAPI->subnets->{$subnetId}->get();
+				if($isFolder === true) {
+					$subnet = $this->_restAPI->folders->{$subnetId}->get();
+				}
+				else {
+					$subnet = $this->_restAPI->subnets->{$subnetId}->get();
+				}
+
 				return $this->_getCallResponse($subnet);
 			}
 			else {
@@ -738,13 +768,20 @@
 		}
 
 		// @todo dns_name --> hostname
-		public function searchAddHostname($addHostname)
+		public function searchAddHostname($addHostname, $strict = false)
 		{
 			if(Tools::is('string&&!empty', $addHostname))
 			{
 				$args = array();
-				$addHostname = str_replace('*', '%', $addHostname);
-				$args['dns_name'] = '##like##%'.$addHostname.'%';
+
+				if($strict) {
+					$args['dns_name'] = $addHostname;
+				}
+				else {
+					$addHostname = rtrim($addHostname, '*%');
+					$addHostname = str_replace('*', '%', $addHostname);
+					$args['dns_name'] = '##like##'.$addHostname.'%';
+				}
 
 				$addresses = $this->_restAPI->cwAddresses->search->get($args);
 				return $this->_getCallResponse($addresses);
@@ -754,13 +791,20 @@
 			}
 		}
 
-		public function searchAddDescription($addDescription)
+		public function searchAddDescription($addDescription, $strict = false)
 		{
 			if(Tools::is('string&&!empty', $addDescription))
 			{
 				$args = array();
-				$addDescription = str_replace('*', '%', $addDescription);
-				$args['description'] = '##like##%'.$addDescription.'%';
+
+				if($strict) {
+					$args['description'] = $addDescription;
+				}
+				else {
+					$addDescription = rtrim($addDescription, '*%');
+					$addDescription = str_replace('*', '%', $addDescription);
+					$args['description'] = '##like##'.$addDescription.'%';
+				}
 
 				$addresses = $this->_restAPI->cwAddresses->search->get($args);
 				return $this->_getCallResponse($addresses);

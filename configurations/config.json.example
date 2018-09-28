@@ -1,13 +1,14 @@
 {
 	"DEFAULT": {
 		"sys": {
-			"browserCmd": "xdg-open"
+			"browserCmd": "xdg-open",
+			"secureShellCmd": "ssh"
 		}	
 	},
 
 	"IPAM": {
 		"servers": {
-			"[IPAM_SERVER_KEY]": "https://myPatchManagerServerAddress.ext",
+			"[IPAM_SERVER_KEY]": "https://myPhpIpamServerAddress.ext",
 			"myIpamKey": "https://demo.phpipam.net"
 		},
 

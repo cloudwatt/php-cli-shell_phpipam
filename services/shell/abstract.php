@@ -2,142 +2,58 @@
 	abstract class Service_Shell_Abstract
 	{
 		protected $_MAIN;
-
-		protected $_pathIds;
-		protected $_pathApi;
-
-		protected $_searchfromCurrentPath = true;
+		protected $_SHELL;
+		protected $_CONFIG;
 
 
-		public function __construct(Service_Abstract $MAIN)
+		public function __construct(Service_Abstract $MAIN, SHELL $SHELL)
 		{
 			$this->_MAIN = $MAIN;
+			$this->_SHELL = $SHELL;
+			$this->_CONFIG = CONFIG::getInstance();
 		}
 
-		public function updatePath(array $pathIds, array $pathApi)
+		// @todo optimiser garder en cache en fonction de context
+		abstract protected function _getObjects($context = null);
+
+		/**
+		  * Affiche les informations d'un seul type d'éléments ou d'objets
+		  * Le code doit pouvoir fonctionner sur un tableau simple ou sur un tableau d'objets
+		  */
+		protected function _printInformations($type, $items, $title = false)
 		{
-			$this->_pathIds = $pathIds;
-			$this->_pathApi = $pathApi;
-			return $this;
-		}
-
-		protected function _browser($path = null, $returnCurrentApi = true)
-		{
-			$pathIds = $this->_pathIds;
-			$pathApi = $this->_pathApi;
-
-			if($path !== null) {
-				// /!\ browser modifie pathIds et pathApi, passage par r�f�rence
-				$this->_MAIN->browser($pathIds, $pathApi, $path);
-			}
-
-			return ($returnCurrentApi) ? (end($pathApi)) : ($pathApi);
-		}
-
-		// @todo optimiser garder en cache en fct path
-		abstract protected function _getObjects($path = null);
-
-		public function getOptions($path = null)
-		{
-			$options = array();
-			$objects = $this->_getObjects($path);
-
-			foreach($objects as $type => $list)
-			{
-				if(count($list) > 0)
-				{
-					foreach($list as $fields)
-					{
-						if(array_key_exists($type, $this->_OPTION_FIELDS)) {
-							$optFields = array_flip($this->_OPTION_FIELDS[$type]['fields']);
-							$option = array_intersect_key($fields, $optFields);
-							$options = array_merge($options, array_values($option));
-						}
-					}
-				}
-			}
-
-			return $options;
-		}
-
-		public function printObjectsList($path = null)
-		{
-			$objects = $this->_getObjects($path);
-			$this->_MAIN->deleteWaitingMsg();
-			$objects = $this->_printObjectsList($objects);
-			$this->_MAIN->setLastCmdResult($objects);
-			return true;
-		}
-
-		protected function _printObjectsList(array $objects)
-		{
-			foreach($objects as $type => &$list)
-			{
-				if(count($list) > 0)
-				{
-					$this->_MAIN->e(PHP_EOL.$this->_LIST_TITLES[$type], 'black', 'white', 'bold');
-
-					foreach($list as &$fields) {
-						$fields = array_intersect_key($fields, array_flip($this->_LIST_FIELDS[$type]['fields']));
-						$fields = vsprintf($this->_LIST_FIELDS[$type]['format'], $fields);
-					}
-
-					$this->_MAIN->e(PHP_EOL.implode(PHP_EOL, $list).PHP_EOL, 'grey');
-				}
-			}
-
-			return $objects;
-		}
-
-		abstract public function printObjectInfos(array $args, $fromCurrentPath = true);
-
-		protected function _printObjectInfos(array $cases, array $args, $fromCurrentPath = true)
-		{
-			if(isset($args[0]))
-			{
-				foreach($cases as $type => $method)
-				{
-					$infos = $this->{$method}($args[0], $fromCurrentPath);
-
-					if(count($infos) > 0) {
-						$objectType = $type;
-						break;
-					}
-				}
-
-				if(isset($objectType)) {
-					$status = $this->_printInformations($objectType, $infos);
-					return array($status, $objectType, $infos);
-				}
-				else {
-					return false;
-				}
-			}
-			else {
-				return false;
-			}
-		}
-
-		protected function _printInformations($type, $items)
-		{
-			$this->_MAIN->deleteWaitingMsg();
-
 			if($items !== false && Tools::is('array&&count>0', $items))
 			{
 				$results = array();
-				$this->_MAIN->e(PHP_EOL.'INFORMATIONS', 'black', 'white', 'bold');
 
-				foreach($items as $item)
+				if($title === false)
+				{
+					if(array_key_exists($type, $this->_PRINT_TITLES)) {
+						$title = $this->_PRINT_TITLES[$type];
+					}
+					else {
+						$title = 'INFORMATIONS';
+					}
+				}
+
+				$this->_MAIN->EOL()->print($title, 'black', 'white', 'bold');
+
+				/**
+				  * /!\ item peut être un objet donc il faut que le code qui le concerne puisse fonctionner sur un objet
+				  * Par exemple: array_key_exists ne peut pas fonctionner, mais isset oui grâce à __isset
+				  */
+				foreach($items as $index => $item)
 				{
 					/**
-					  * Il faut r�initialiser $infos pour chaque item
+					  * Il faut réinitialiser $infos pour chaque item
 					  * Permet aussi de garder l'ordre de _PRINT_FIELDS
 					  */
 					$infos = array();
 
 					foreach($this->_PRINT_FIELDS[$type] as $key => $format)
 					{
-						if(array_key_exists($key, $item))
+						// /!\ Code compatible array et object !
+						if((is_array($item) && array_key_exists($key, $item)) || isset($item[$key]))
 						{
 							$field = $item[$key];
 							$field = vsprintf($format, $field);
@@ -145,7 +61,7 @@
 							switch($key)
 							{
 								case 'header':
-									$field = $this->_MAIN->e($field, 'green', false, 'bold', true);
+									$field = $this->_MAIN->format($field, 'green', false, 'bold');
 									break;
 							}
 
@@ -155,54 +71,97 @@
 
 					if(count($infos) > 0) {
 						$results[] = $infos;
-						$this->_MAIN->e(PHP_EOL.PHP_EOL.implode(PHP_EOL, $infos), 'grey');
+						$this->_MAIN->EOL()->print(implode(PHP_EOL, $infos), 'grey');
 					}
 				}
 
+				$this->_MAIN->EOL();
 				$this->_MAIN->setLastCmdResult($results);
 				return true;
 			}
-
-			return false;
-		}
-
-		protected function _getLastApiPath(array $pathApi, $apiClassName)
-		{
-			$pathApi = array_reverse($pathApi);
-
-			foreach($pathApi as $api)
-			{
-				if(get_class($api) === $apiClassName) {
-					return $api;
-				}
+			else {
+				$this->_MAIN->error("Aucun élément à afficher", 'orange');
 			}
 
 			return false;
 		}
 
-		protected function _arrayFilter(array $items, array $fields)
-		{
-			$results = array();
+		abstract public function printObjectInfos(array $args, $fromCurrentContext = true);
 
-			foreach($items as $item)
+		/**
+		  * Récupère les informations d'un seul type d'éléments ou d'objets puis les affiche
+		  * Le code doit pouvoir fonctionner sur un tableau simple ou sur un tableau d'objets
+		  */
+		protected function _printObjectInfos(array $cases, array $args, $fromCurrentContext = true)
+		{
+			if(isset($args[0]))
 			{
-				if(count($item) > 0)
+				foreach($cases as $type => $method)
 				{
-					$result = array();
+					$objects = $this->{$method}($args[0], $fromCurrentContext);
 
-					foreach($fields as $field)
-					{
-						if(array_key_exists($field, $item)) {
-							$result[$field] = $item[$field];
-						}
+					if(count($objects) > 0) {
+						$objectType = $type;
+						break;
 					}
+				}
 
-					if(count($result) > 0) {
-						$results[] = $result;
-					}
+				if(isset($objectType)) {
+					$status = $this->_printInformations($objectType, $objects);
+					return array($status, $objectType, $objects);
 				}
 			}
 
-			return $results;
+			$this->_MAIN->deleteWaitingMsg();		// Garanti la suppression du message
+			return false;
+		}
+
+		/**
+		  * Récupère les informations de tous les éléments ou objets puis les affiche
+		  */
+		public function printObjectsList($context = null)
+		{
+			$this->_MAIN->displayWaitingMsg();
+			$objects = $this->_getObjects($context);
+			return $this->_printObjectsList($objects);
+		}
+
+		/**
+		  * Affiche les informations de plusieurs types d'éléments ou d'objets
+		  * Le code doit pouvoir fonctionner sur un tableau simple ou sur un tableau d'objets
+		  */
+		protected function _printObjectsList(array $objects)
+		{
+			foreach($objects as $type => &$items)
+			{
+				if(count($items) > 0)
+				{
+					$this->_MAIN->EOL()->print($this->_LIST_TITLES[$type], 'black', 'white', 'bold');
+
+					$items = Tools::arrayFilter($items, $this->_LIST_FIELDS[$type]['fields']);
+
+					foreach($items as &$item)
+					{
+						/**
+						  * /!\ L'ordre de base dans item est conservé ce qui rend le résultat incertain
+						  * Préférer l'utilisation de la méthode Tools::arrayFilter qui filtre et garanti l'ordre
+						  */
+						//$item = array_intersect_key($item, array_flip($this->_LIST_FIELDS[$type]['fields']));
+
+						$item = vsprintf($this->_LIST_FIELDS[$type]['format'], $item);
+
+						$item = preg_replace_callback("#([^\t]*)(\t+)#i", function(array $matches) {
+							return $matches[1].Tools::t($matches[1], "\t", mb_strlen($matches[2]), 0, 8);
+						}
+						, $item);
+					}
+
+					$this->_MAIN->EOL()->print(implode(PHP_EOL, $items), 'grey');
+					$this->_MAIN->EOL();
+				}
+			}
+
+			$this->_MAIN->deleteWaitingMsg();		// Garanti la suppression du message
+			return $objects;
 		}
 	}

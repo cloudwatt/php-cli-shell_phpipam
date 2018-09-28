@@ -4,7 +4,7 @@
 		const OBJECT_TYPE = 'section';
 		const FIELD_NAME = 'name';
 
-		static protected $_sections;
+		protected static $_sections = array();
 
 
 		public function sectionIdIsValid($sectionId)
@@ -125,23 +125,45 @@
 			return $this->_getObjectId($subnets, Ipam_Api_Subnet::FIELD_NAME, $subnetName);
 		}
 
-		static protected function _getSections()
+		public function getRootSections()
 		{
-			if(self::$_sections === null) {
-				self::$_sections = self::$_IPAM->getAllSections();
-			}
-			return self::$_sections;
+			return $this->findRootSections();
 		}
 
-		// @todo a revoir masterSection === 0 ?
-		public static function getRootSections()
+		public function findRootSections()
+		{
+			return self::_getSections($this->_IPAM);
+		}
+
+		public static function searchRootSections()
 		{
 			return self::_getSections();
 		}
 
-		public static function searchSectionNames($sectionName)
+		public function findSectionNames($sectionName, $strict = false)
+		{
+			$sections = self::_getSections($this->_IPAM);
+			return self::_searchObjects($sections, self::FIELD_NAME, $sectionName, $strict);
+		}
+
+		public static function searchSectionNames($sectionName, $strict = false)
 		{
 			$sections = self::_getSections();
-			return self::_searchObjects($sections, self::FIELD_NAME, $sectionName);
+			return self::_searchObjects($sections, self::FIELD_NAME, $sectionName, $strict);
+		}
+
+		protected static function _getSections(IPAM_Main $IPAM = null)
+		{
+			if($IPAM === null) {
+				$IPAM = self::$_IPAM;
+			}
+
+			$id = $IPAM->getServerId();
+
+			if(!array_key_exists($id, self::$_sections)) {
+				self::$_sections[$id] = $IPAM->getAllSections();
+			}
+
+			return self::$_sections[$id];
 		}
 	}

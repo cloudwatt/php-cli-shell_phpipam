@@ -1,7 +1,7 @@
 <?php
-	include_once('abstract.php');
+	require_once('browser.php');
 
-	class Service_Shell_Ipam extends Service_Shell_Abstract
+	class Service_Shell_Ipam extends Service_Shell_Abstract_Browser
 	{
 		protected $_OPTION_FIELDS = array(
 			'section' => array(
@@ -48,6 +48,14 @@
 				'fields' => array('ip', 'hostname', 'description', 'status'),
 				'format' => '(%4$s) %1$s [%2$s] {%3$s}'
 			)
+		);
+
+		protected $_PRINT_TITLES = array(
+			'section' => 'SECTIONS',
+			'folder' => 'FOLDERS',
+			'subnet' => 'SUBNETS',
+			'vlan' => 'VLANS',
+			'address' => 'ADDRESSES',
 		);
 
 		protected $_PRINT_FIELDS = array(
@@ -105,9 +113,13 @@
 			),
 		);
 
+		protected $_searchfromCurrentPath = true;
 
-		protected function _getObjects($path = null)
+
+		protected function _getObjects($context = null)
 		{
+			$path = $context;
+
 			$items = array(
 				'Ipam_Api_Section' => array(),
 				'Ipam_Api_Folder' => array(),
@@ -155,10 +167,9 @@
 
 						switch($objectClass)
 						{
-							case 'Ipam_Api_Folder':
 							case 'Ipam_Api_Subnet':
 							{
-								$ipv4 = Ipam_Api_Subnet_Abstract::isIpv4Subnet($object);
+								$ipv4 = Ipam_Api_Subnet::isIpv4Subnet($object);
 								$objectName .= ($ipv4) ? ('#IPv4') : ('#IPv6');
 
 								$items[$objectClass][] = array(
@@ -228,7 +239,7 @@
 			);
 		}
 
-		public function printObjectInfos(array $args, $fromCurrentPath = true)
+		public function printObjectInfos(array $args, $fromCurrentContext = true)
 		{
 			/**
 			  * @todo a décommenter après correction bug PHPIPAM
@@ -268,10 +279,19 @@
 				'address' => '_getAddressInfos'
 			);
 
-			$result = $this->_printObjectInfos($cases, $args, $fromCurrentPath);
+			$result = $this->_printObjectInfos($cases, $args, $fromCurrentContext);
 
 			if($result !== false) {
 				list($status, $objectType, $infos) = $result;
+
+				/**
+				  * /!\ Attention aux doublons lorsque printObjectsList est appelé manuellement
+				  * Voir code pour ls ou ll dans services/browser méthode _routeShellCmd
+				  */
+				/*if($status && $objectType === 'subnet') {
+					$this->printSubnetExtra($infos);
+				}*/
+
 				return $status;
 			}
 			else {
@@ -287,7 +307,7 @@
 				$status = $this->_printInformations('section', $infos);
 
 				if($status === false) {
-					Tools::e("Section introuvable", 'orange');
+					$this->_MAIN->error("Section introuvable", 'orange');
 				}
 
 				return true;
@@ -304,7 +324,7 @@
 				$status = $this->_printInformations('folder', $infos);
 
 				if($status === false) {
-					Tools::e("Dossier introuvable", 'orange');
+					$this->_MAIN->error("Dossier introuvable", 'orange');
 				}
 
 				return true;
@@ -321,16 +341,10 @@
 				$status = $this->_printInformations('subnet', $infos);
 
 				if($status === false) {
-					Tools::e("Subnet introuvable", 'orange');
+					$this->_MAIN->error("Subnet introuvable", 'orange');
 				}
-				elseif(count($infos) === 1)
-				{
-					$this->_MAIN->displayWaitingMsg();
-
-					$path = $infos[0]['path'].'/'.$infos[0]['name'];
-					$objects = $this->_getObjects($path);
-					$this->_MAIN->deleteWaitingMsg();
-					$this->_printObjectsList($objects);
+				else {
+					$this->printSubnetExtra($infos);
 				}
 
 				return true;
@@ -347,7 +361,7 @@
 				$status = $this->_printInformations('vlan', $infos);
 
 				if($status === false) {
-					Tools::e("VLAN introuvable", 'orange');
+					$this->_MAIN->error("VLAN introuvable", 'orange');
 				}
 
 				return true;
@@ -364,7 +378,7 @@
 				$status = $this->_printInformations('address', $infos);
 
 				if($status === false) {
-					Tools::e("Adresse IP introuvable", 'orange');
+					$this->_MAIN->error("Adresse IP introuvable", 'orange');
 				}
 
 				return true;
@@ -373,7 +387,15 @@
 			return false;
 		}
 
-		protected function _getSectionInfos($section, $fromCurrentPath, $path = null)
+		protected function printSubnetExtra(array $infos)
+		{
+			if(count($infos) === 1) {
+				$path = $infos[0]['path'].'/'.$infos[0]['name'];
+				$this->printObjectsList($path);
+			}
+		}
+
+		protected function _getSectionInfos($section, $fromCurrentPath = true, $path = null)
 		{
 			$items = array();
 			$sections = array();
@@ -417,13 +439,13 @@
 			return $items;
 		}
 
-		protected function _getFolderInfos($subnet, $fromCurrentPath, $path = null)
+		protected function _getFolderInfos($subnet, $fromCurrentPath = true, $path = null)
 		{
 			// @todo a coder
 			return array();
 		}
 
-		protected function _getSubnetInfos($subnet, $fromCurrentPath, $path = null)
+		protected function _getSubnetInfos($subnet, $fromCurrentPath = true, $path = null)
 		{
 			$items = array();
 			$subnets = array();
@@ -570,7 +592,7 @@
 			return $items;
 		}
 
-		protected function _getVlanInfos($vlan, $fromCurrentPath, $path = null)
+		protected function _getVlanInfos($vlan, $fromCurrentPath = true, $path = null)
 		{
 			$items = array();
 			$vlans = array();
@@ -638,7 +660,7 @@
 				$vlanNumber = $Ipam_Api_Vlan->getNumber();
 				$subnets = $Ipam_Api_Vlan->getSubnets();
 
-				$subnets = $this->_arrayFilter($subnets, $this->_LIST_FIELDS['vlan']['subnet']['fields']);
+				$subnets = Tools::arrayFilter($subnets, $this->_LIST_FIELDS['vlan']['subnet']['fields']);
 
 				foreach($subnets as &$subnet) {
 					$subnet = vsprintf($this->_LIST_FIELDS['vlan']['subnet']['format'], $subnet);
@@ -649,7 +671,7 @@
 				$item['name'] = $vlanName;
 				$item['number'] = $vlanNumber;
 				$item['description'] = $Ipam_Api_Vlan->getDescription();
-				$item['subnets'] = $subnets;
+				$item['subnets'] = $subnets;	// @todo a verifier, besoin implode?
 
 				$items[] = $item;
 			}
@@ -657,7 +679,7 @@
 			return $items;
 		}
 
-		protected function _getAddressInfos($address, $fromCurrentPath, $path = null)
+		protected function _getAddressInfos($address, $fromCurrentPath = true, $path = null)
 		{
 			$items = array();
 			$addresses = array();
@@ -733,6 +755,7 @@
 			{
 				$Ipam_Api_Address = new Ipam_Api_Address($address['id']);
 				$Ipam_Api_Subnet = $Ipam_Api_Address->getSubnetApi();
+				$Ipam_Api_Vlan = $Ipam_Api_Subnet->getVlanApi();
 
 				$ip = $Ipam_Api_Address->getIp();
 				$cidrMask = $Ipam_Api_Subnet->getCidrMask();
@@ -744,13 +767,16 @@
 				$item['netMask'] = $Ipam_Api_Subnet->getNetMask();
 				$item['subnet'] = $Ipam_Api_Subnet->getSubnet();
 				$item['gateway'] = $Ipam_Api_Subnet->getGateway();
-				$item['vlanNumber'] = $Ipam_Api_Subnet->vlanApi->getNumber();
-				$item['VlanName'] = $Ipam_Api_Subnet->vlanApi->getName();
 				$item['hostname'] = $Ipam_Api_Address->getHostname();
 				$item['description'] = $Ipam_Api_Address->getDescription();
 				$item['status'] = ucfirst(Ipam_Api_Address::TAGS[$Ipam_Api_Address->getTag()]);
 				$item['note'] = $Ipam_Api_Address->getNote();
 				$item['subnetPath'] = '/'.implode('/', $Ipam_Api_Subnet->getPath());
+
+				if($Ipam_Api_Vlan instanceof Ipam_Api_Vlan) {
+					$item['vlanNumber'] = $Ipam_Api_Vlan->getNumber();
+					$item['VlanName'] = $Ipam_Api_Vlan->getName();
+				}
 
 				$items[] = $item;
 			}
@@ -766,21 +792,17 @@
 				$objects = $this->_searchObjects($args[0], $args[1], $args[2]);
 				$time2 = microtime(true);
 
-				$this->_MAIN->deleteWaitingMsg();
-
 				if($objects !== false)
 				{
 					$this->_MAIN->setLastCmdResult($objects);
-					$this->_MAIN->e(PHP_EOL.'RECHERCHE ('.round($time2-$time1).'s)', 'black', 'white', 'bold');
+					$this->_MAIN->print('RECHERCHE ('.round($time2-$time1).'s)', 'black', 'white', 'bold');
 
 					if(!$this->_MAIN->isOneShotCall())
 					{
 						if(isset($objects['subnets']))
 						{
-							$this->_MAIN->e(PHP_EOL);
-
 							$counter = count($objects['subnets']);
-							$this->_MAIN->e(PHP_EOL.'SUBNETS ('.$counter.')', 'black', 'white');
+							$this->_MAIN->EOL()->print('SUBNETS ('.$counter.')', 'black', 'white');
 
 							if($counter > 0)
 							{
@@ -791,21 +813,19 @@
 									$text2 = $subnet['network'].'/'.$subnet['cidrMask'];
 									$text2 .= Tools::t($text2, "\t", 4, 0, 8);
 									$text3 = '{'.$subnet['name'].'}';
-									Tools::e(PHP_EOL.$text1.$text2.$text3, 'grey');
+									$this->_MAIN->print($text1.$text2.$text3, 'grey');
 								}
 							}
 							else {
-								Tools::e(PHP_EOL.'Aucun résultat', 'orange');
+								$this->_MAIN->error('Aucun résultat', 'orange');
 							}
 						}
 
 						// @todo gerer l2domains
 						if(isset($objects['vlans']))
 						{
-							$this->_MAIN->e(PHP_EOL);
-
 							$counter = count($objects['vlans']);
-							$this->_MAIN->e(PHP_EOL.'VLANS ('.$counter.')', 'black', 'white');
+							$this->_MAIN->EOL()->print('VLANS ('.$counter.')', 'black', 'white');
 
 							if($counter > 0)
 							{
@@ -817,20 +837,18 @@
 									$text2 = $vlan['number'].' '.$vlan['name'];
 									$text2 .= Tools::t($text2, "\t", 4, 0, 8);
 									$text3 = '{'.$vlan['description'].'}';
-									Tools::e(PHP_EOL.$text1.$text2.$text3, 'grey');
+									$this->_MAIN->print($text1.$text2.$text3, 'grey');
 								}
 							}
 							else {
-								Tools::e(PHP_EOL.'Aucun résultat', 'orange');
+								$this->_MAIN->error('Aucun résultat', 'orange');
 							}
 						}
 
 						if(isset($objects['addresses']))
 						{
-							$this->_MAIN->e(PHP_EOL);
-
 							$counter = count($objects['addresses']);
-							$this->_MAIN->e(PHP_EOL.'ADDRESSES ('.$counter.')', 'black', 'white');
+							$this->_MAIN->EOL()->print('ADDRESSES ('.$counter.')', 'black', 'white');
 
 							if($counter > 0)
 							{
@@ -841,17 +859,19 @@
 									$text2 = $address['ip'];
 									$text2 .= Tools::t($text2, "\t", 4, 0, 8);
 									$text3 = $address['hostname'].' {'.$address['description'].'}';
-									Tools::e(PHP_EOL.$text1.$text2.$text3, 'grey');
+									$this->_MAIN->print($text1.$text2.$text3, 'grey');
 								}
 							}
 							else {
-								Tools::e(PHP_EOL.'Aucun résultat', 'orange');
+								$this->_MAIN->error('Aucun résultat', 'orange');
 							}
 						}
+
+						$this->_MAIN->EOL();
 					}
 				}
 				else {
-					Tools::e("Aucun résultat", 'orange');
+					$this->_MAIN->error("Aucun résultat trouvé", 'orange');
 				}
 
 				return true;
