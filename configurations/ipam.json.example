@@ -1,0 +1,36 @@
+{
+	"DEFAULT": {
+		"sys": {
+			"browserCmd": "xdg-open",
+			"secureShellCmd": "ssh",
+			"javawsCmd": "javaws"
+		}	
+	},
+
+	"IPAM": {
+		"servers": {
+			"[IPAM_SERVER_KEY]": {
+				"loginCredential": false,
+				"loginEnvVarName": "IPAM_[IPAM_SERVER_KEY]_LOGIN",
+				"passwordCredential": false,
+				"passwordEnvVarName": "IPAM_[IPAM_SERVER_KEY]_PASSWORD",
+				"serverLocation": "https://myPhpIpamServerAddress.ext",
+				"objectCaching" : true
+			},
+
+			"myIpamKey": {
+				"loginCredential": false,
+				"loginEnvVarName": "IPAM_myIpamKey_LOGIN",
+				"passwordCredential": false,
+				"passwordEnvVarName": "IPAM_myIpamKey_PASSWORD",
+				"serverLocation": "https://demo.phpipam.net",
+				"objectCaching" : true
+			}
+		},
+
+		"contexts": {
+			"[IPAM_SERVER_KEY]": "myAPP",
+			"myIpamKey": "myAPP"
+		}
+	}
+}

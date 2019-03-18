@@ -1,0 +1,7 @@
+{
+	"DEFAULT": { 
+		"sys": {
+			"browserCmd": "python -mwebbrowser"
+		}
+	}
+}

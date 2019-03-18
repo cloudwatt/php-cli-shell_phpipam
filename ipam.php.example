@@ -1,29 +1,23 @@
 <?php
 	define("ROOT_DIR", __DIR__);
-	require_once('services/ipam.php');
+	define("APP_DIR", __DIR__ . '/applications/ipam');
 
 	if(!isset($configurations))
 	{
 		$configurations = array(
-			__DIR__ . '/configurations/config.json',
-			__DIR__ . '/configurations/config.user.json',
+			__DIR__ . '/configurations/ipam.json',
+			__DIR__ . '/configurations/ipam.user.json',
 		);
 	}
 
-	/**
-	  * Déplace le curseur d'une ligne vers le haut
-	  * Fix le saut de ligne lors de la touche entrée pour lancer le script CLI
-	  *
-	  * Permet d'harmoniser le traitement des sauts de lignes:
-	  * --> Saut de ligne avant un texte et non après!
-	  */
-	echo "\033[1A";
+	require_once(APP_DIR . '/launchers/ipam.php');
+	$Launcher = new \App\Ipam\Launcher_Ipam();
 
 	/**
 	  * Change [IPAM_SERVER_KEY] with the key of your PHPIAPM server in configuration file
 	  * Example: $MAIN = new Service_Ipam($configurations, 'myIpamKey');
 	  */
-	$MAIN = new Service_Ipam($configurations, '[IPAM_SERVER_KEY]');
+	$SHELL = new \App\Ipam\Shell_Ipam($configurations, '[IPAM_SERVER_KEY]');
 
 	echo PHP_EOL;
 	exit();
