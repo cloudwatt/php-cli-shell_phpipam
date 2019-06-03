@@ -39,9 +39,9 @@ pcre.jit=0
 
 #### REPOSITORY
 * git clone https://github.com/cloudwatt/php-cli-shell_base
-* git checkout tags/v2.1
+* git checkout tags/v2.1.1
 * git clone https://github.com/cloudwatt/php-cli-shell_phpipam
-* git checkout tags/v2.1
+* git checkout tags/v2.1.1
 * Merge these two repositories
 
 #### CONFIGURATION FILE
