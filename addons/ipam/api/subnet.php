@@ -221,7 +221,7 @@
 		public function getSubSubnetApi($subnetName)
 		{
 			$subnetId = $this->getSubSubnetId($subnetName);
-			return ($subnetId !== false) ? (new self($subnetId)) : (false);
+			return ($subnetId !== false) ? (new self($subnetId, $this->_service)) : (false);
 		}
 
 		public function getSubSubnets($subnetName = null)
@@ -259,7 +259,7 @@
 				$vlanId = $this->getVlanId();
 
 				if($vlanId !== false) {
-					$this->_vlanApi = new Api_Vlan($vlanId);
+					$this->_vlanApi = new Api_Vlan($vlanId, $this->_service);
 				}
 				else {
 					$this->_vlanApi = false;
@@ -302,7 +302,7 @@
 		public function getAddressApi($address)
 		{
 			$addressId = $this->getAddressId($address);
-			return ($addressId !== false) ? (new Api_Address($addressId)) : (false);
+			return ($addressId !== false) ? (new Api_Address($addressId, $this->_service)) : (false);
 		}
 
 		/**

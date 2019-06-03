@@ -45,7 +45,7 @@
 				$sectionId = $this->getSectionId();
 
 				if($sectionId !== false) {
-					$this->_sectionApi = new Api_Section($sectionId);
+					$this->_sectionApi = new Api_Section($sectionId, $this->_service);
 				}
 				else {
 					$this->_sectionApi = false;
@@ -110,10 +110,10 @@
 				if($parentSubnet !== false)
 				{
 					if((int) $parentSubnet['isFolder'] === 1) {
-						$this->_parentSubnetApi = new Api_Folder($parentSubnet[Api_Folder::FIELD_ID]);
+						$this->_parentSubnetApi = new Api_Folder($parentSubnet[Api_Folder::FIELD_ID], $this->_service);
 					}
 					else {
-						$this->_parentSubnetApi = new Api_Subnet($parentSubnet[Api_Subnet::FIELD_ID]);
+						$this->_parentSubnetApi = new Api_Subnet($parentSubnet[Api_Subnet::FIELD_ID], $this->_service);
 					}
 				}
 				else {
@@ -163,7 +163,7 @@
 					$sectionId = $this->_getField('sectionId', 'int&&>0');
 
 					if(Api_Section::objectIdIsValid($sectionId)) {
-						$objectApi = new Api_Section($sectionId);
+						$objectApi = new Api_Section($sectionId, $this->_service);
 						$path = $objectApi->getPaths(true);
 					}
 				}

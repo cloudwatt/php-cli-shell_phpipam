@@ -88,7 +88,7 @@
 		public function getSubFolderApi($folderName)
 		{
 			$folderId = $this->getSubFolderId($folderName);
-			return ($folderId !== false) ? (new self($folderId)) : (false);
+			return ($folderId !== false) ? (new self($folderId, $this->_service)) : (false);
 		}
 
 		public function getSubFolders($folderName = null)
@@ -116,7 +116,7 @@
 		public function getSubnetApi($subnetName)
 		{
 			$subnetId = $this->getSubnetId($subnetName);
-			return ($subnetId !== false) ? (new Api_Subnet($subnetId)) : (false);
+			return ($subnetId !== false) ? (new Api_Subnet($subnetId, $this->_service)) : (false);
 		}
 
 		public function getSubnets($subnetName = null)

@@ -190,7 +190,7 @@
 				$subnetId = $this->getSubnetId();
 
 				if($subnetId !== false) {
-					$this->_subnetApi = new Api_Subnet($subnetId);
+					$this->_subnetApi = new Api_Subnet($subnetId, $this->_service);
 				}
 				else {
 					$this->_subnetApi = false;
