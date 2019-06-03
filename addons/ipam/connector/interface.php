@@ -1,7 +1,7 @@
 <?php
 	namespace Addon\Ipam;
 
-	interface Connector_Interface	// /!\ Permet de garantir que l'ensemble des méthodes IPAM existent dans l'orchestrateur et le connecteur
+	interface Connector_Interface
 	{
 		public function getByEquipLabel($equipLabel, $IPv = 4);
 		public function getByEquipLabelVlanName($equipLabel, $vlanName, $IPv = 4);

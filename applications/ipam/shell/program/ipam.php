@@ -9,6 +9,20 @@
 
 	class Shell_Program_Ipam extends Cli\Shell\Program\Browser
 	{
+		const OBJECT_NAMES = array(
+				Ipam\Api_Section::OBJECT_TYPE => Ipam\Api_Section::OBJECT_NAME,
+				Ipam\Api_Folder::OBJECT_TYPE => Ipam\Api_Folder::OBJECT_NAME,
+				Ipam\Api_Subnet::OBJECT_TYPE => Ipam\Api_Subnet::OBJECT_NAME,
+				Ipam\Api_Address::OBJECT_TYPE => Ipam\Api_Address::OBJECT_NAME,
+		);
+
+		const RESULT_KEYS = array(
+				Ipam\Api_Section::OBJECT_TYPE => 'sections',
+				Ipam\Api_Folder::OBJECT_TYPE => 'folders',
+				Ipam\Api_Subnet::OBJECT_TYPE => 'subnets',
+				Ipam\Api_Address::OBJECT_TYPE => 'addresses',
+		);
+
 		protected $_OPTION_FIELDS = array(
 			'section' => array(
 				'fields' => array('name'),
@@ -31,28 +45,28 @@
 
 		protected $_LIST_FIELDS = array(
 			'section' => array(
-				'fields' => array('name'),
-				'format' => '%s'
+				'fields' => false,
+				'format' => false
 			),
 			'folder' => array(
-				'fields' => array('name'),
-				'format' => '%s'
+				'fields' => false,
+				'format' => false
 			),
 			'subnet' => array(
-				'fields' => array('name', 'subnet', 'mask'),
-				'format' => '%s - %s/%d'
+				'fields' => false,
+				'format' => false
 			),
 			'vlan' => array(
-				'fields' => array('number', 'name'),
-				'format' => '%d - %s',
+				'fields' => false,
+				'format' => false,
 				'subnet' => array(
 					'fields' => array('description', 'subnet', 'mask'),
 					'format' => '- %s (%s/%d)'
 				)
 			),
 			'address' => array(
-				'fields' => array('ip', 'hostname', 'description', 'status'),
-				'format' => '(%4$s) %1$s [%2$s] {%3$s}'
+				'fields' => false,
+				'format' => false
 			)
 		);
 
@@ -84,8 +98,6 @@
 				'network' => 'Network: %s',
 				'cidrMask' => 'CIDR mask: %d',
 				'netMask' => 'NET mask: %s',
-				'networkIP' => 'Network IP: %s',
-				'broadcastIP' => 'Broadcast IP: %s',
 				'firstIP' => 'First IP: %s',
 				'lastIP' => 'Last IP: %s',
 				'gateway' => 'Gateway: %s',
@@ -119,138 +131,930 @@
 			),
 		);
 
+		/**
+		  * @var Addon\Ipam\Service_Store
+		  */
+		protected $_addonStore;
+
+		/**
+		  * @var bool
+		  */
 		protected $_searchfromCurrentPath = true;
 
 
-		protected function _getObjects($context = null)
+		public function __construct(Cli\Shell\Main $SHELL)
 		{
-			$path = $context;
+			parent::__construct($SHELL);
 
-			$items = array(
-				Ipam\Api_Section::OBJECT_KEY => array(),
-				Ipam\Api_Folder::OBJECT_KEY => array(),
-				Ipam\Api_Subnet::OBJECT_KEY => array(),
-				Ipam\Api_Vlan::OBJECT_KEY => array(),
-				Ipam\Api_Address::OBJECT_KEY => array(),
-			);
+			$this->_addonStore = Ipam\Orchestrator::getInstance()->service->store;
+		}
 
-			$currentApi = $this->_browser($path);
-			$currentApiClass = get_class($currentApi);
+		// SHOW
+		// --------------------------------------------------
+		protected function _getView(array $args)
+		{
+			$args = array_reverse($args);
 
-			/**
-			  * Utiliser pour Addon\Ipam\Api_Subnet la fonction
-			  * permettant de rechercher à la fois un nom et un subnet
-			  */
-			$cases = array(
-				'Addon\Ipam\Api_Section' => array(
-					'Addon\Ipam\Api_Section' => 'findSections',
-					'Addon\Ipam\Api_Folder' => 'findFolders',
-					'Addon\Ipam\Api_Subnet' => 'findSubnets',
-				),
-				'Addon\Ipam\Api_Folder' => array(
-					'Addon\Ipam\Api_Folder' => 'findFolders',
-					'Addon\Ipam\Api_Subnet' => 'findSubnets',
-				),
-				'Addon\Ipam\Api_Subnet' => array(
-					'Addon\Ipam\Api_Subnet' => 'findSubnets',
-				),
-			);
+			if(isset($args[1]) && $args[1] === '|') {
+				return $args[0];
+			}
+			else {
+				return false;
+			}
+		}
 
-			if(array_key_exists($currentApiClass, $cases))
+		public function listSections(array $args)
+		{
+			return $this->_listObjects(Ipam\Api_Section::OBJECT_TYPE, $args);
+		}
+
+		public function showSections(array $args)
+		{
+			return $this->_showObjects(Ipam\Api_Section::OBJECT_TYPE, $args);
+		}
+
+		public function listFolders(array $args)
+		{
+			return $this->_listObjects(Ipam\Api_Folder::OBJECT_TYPE, $args);
+		}
+
+		public function showFolders(array $args)
+		{
+			return $this->_showObjects(Ipam\Api_Folder::OBJECT_TYPE, $args);
+		}
+
+		public function listSubnets(array $args)
+		{
+			return $this->_listObjects(Ipam\Api_Subnet::OBJECT_TYPE, $args);
+		}
+
+		public function showSubnets(array $args)
+		{
+			return $this->_showObjects(Ipam\Api_Subnet::OBJECT_TYPE, $args);
+		}
+
+		protected function _printSubnetExtra(array $subnets, array $args = null)
+		{
+			if(count($subnets) === 1)
 			{
-				foreach($cases[$currentApiClass] as $objectClass => $objectMethod)
+				$this->_SHELL->displayWaitingMsg(true, false, 'searching IPAM addresses');
+
+				$path = $subnets[0]['path'].'/'.$subnets[0]['name'];
+				$objects = $this->_getObjects($path, $args);
+				$this->_printObjectsList($objects);
+
+				$this->_RESULTS['addresses'] = $objects['address'];
+			}
+		}
+
+		public function listVlans(array $args)
+		{
+			return $this->_listObjects(Ipam\Api_Vlan::OBJECT_TYPE, $args);
+		}
+
+		public function showVlans(array $args)
+		{
+			return $this->_showObjects(Ipam\Api_Vlan::OBJECT_TYPE, $args);
+		}
+
+		public function listAddresses(array $args)
+		{
+			return $this->_listObjects(Ipam\Api_Address::OBJECT_TYPE, $args);
+		}
+
+		public function showAddresses(array $args)
+		{
+			return $this->_showObjects(Ipam\Api_Address::OBJECT_TYPE, $args);
+		}
+
+		protected function _listObjects($type, array $args)
+		{
+			$view = $this->_getView($args);
+
+			switch($view)
+			{
+				case 'form': {
+					$status = $this->_printObjectForm($type, $args, true);
+					break;
+				}
+				default: {
+					$status = $this->_printObjectList($type, $args, true);
+				}
+			}
+
+			return ($status !== false);
+		}
+
+		protected function _showObjects($type, array $args)
+		{
+			$view = $this->_getView($args);
+
+			switch($view)
+			{
+				case 'form': {
+					$status = $this->_printObjectForm($type, $args, false);
+					break;
+				}
+				default: {
+					$status = $this->_printObjectList($type, $args, false);
+				}
+			}
+
+			return ($status !== false);
+		}
+
+		protected function _printObjectForm($type, array $args, $fromCurrentPath = true)
+		{
+			if(isset($args[0]))
+			{
+				list($items, $resultKey, $objectName) = $this->_getTypeParams($type, $args[0], $fromCurrentPath);
+				$status = $this->_printInformations($type, $items);
+
+				if($status === false) {
+					$this->_SHELL->error("Objet '".ucfirst($objectName)."' introuvable", 'orange');
+				}
+				else {
+					$this->_printObjectExtra($type, $items, $args);
+				}
+
+				$this->_RESULTS[$resultKey] = $items;
+				return $items;
+			}
+
+			return false;
+		}
+
+		protected function _printObjectList($type, array $args, $fromCurrentPath = true)
+		{
+			if(isset($args[0]))
+			{
+				list($items, $resultKey, $objectName) = $this->_getTypeParams($type, $args[0], $fromCurrentPath);
+
+				if(count($items) > 0)
 				{
-					if($objectMethod !== false) {
-						$objects = call_user_func(array($currentApi, $objectMethod), '*');
-					}
-					else {
-						$objects = false;
-					}
-
-					if(C\Tools::is('array&&count>0', $objects))
+					if(!$this->_SHELL->isOneShotCall())
 					{
-						foreach($objects as $object)
+						switch($type)
 						{
-							switch($objectClass)
+							case Ipam\Api_Subnet::OBJECT_TYPE:
 							{
-								case 'Addon\Ipam\Api_Subnet':
-								{
-									if(!C\Tools::is('string&&!empty', $object[Ipam\Api_Subnet::FIELD_NAME])) {
-										$object[Ipam\Api_Subnet::FIELD_NAME] = $object['subnet'].'/'.$object['mask'];
-									}
-									else {
-										$object = $this->formatSubnetNameWithIPv($object, true);
-									}
-
-									$items[$objectClass::OBJECT_KEY][] = array(
-										'name' => $object[$objectClass::FIELD_NAME],
-										'subnet' => $object['subnet'],
-										'mask' => $object['mask'],
+								foreach($items as &$item)
+								{	
+									$item = array(
+										$item['network'].'/'.$item['cidrMask'],
+										$item['name'],
+										$item['firstIP'],
+										$item['lastIP'],
+										$item['vlanNumber'],
+										$item['vlanName'],
+										$item['sectionName'],
+										$item['path'],
 									);
-									break;
 								}
-								default: {
-									$items[$objectClass::OBJECT_KEY][] = array('name' => $object[$objectClass::FIELD_NAME]);
+								unset($item);
+								break;
+							}
+							case Ipam\Api_Vlan::OBJECT_TYPE:
+							{
+								foreach($items as &$item)
+								{	
+									$item = array(
+										$item['number'],
+										$item['name'],
+										$item['description'],
+									);
 								}
+								unset($item);
+								break;
+							}
+							case Ipam\Api_Address::OBJECT_TYPE:
+							{
+								foreach($items as &$item)
+								{	
+									$item = array(
+										$item['ip'],
+										$item['cidrMask'],
+										$item['netMask'],
+										$item['hostname'],
+										$item['description'],
+										$item['status'],
+										$item['subnet'],
+										$item['subnetPath'],
+									);
+								}
+								unset($item);
+								break;
+							}
+							default:
+							{
+								foreach($items as &$item) {
+									unset($item['header']);
+								}
+								unset($item);
 							}
 						}
 					}
-					elseif($currentApi instanceof Ipam\Api_Subnet)
+
+					$this->_printObjectsList(array($type => $items));
+					$this->_printObjectExtra($type, $items, $args);
+				}
+				else {
+					$this->_SHELL->error("Aucun objet '".$objectName."' n'a été trouvé", 'orange');
+				}
+
+				$this->_RESULTS[$resultKey] = $items;
+				return $items;
+			}
+
+			return false;
+		}
+
+		protected function _getTypeParams($type, $name, $fromCurrentPath)
+		{
+			switch($type)
+			{
+				case Ipam\Api_Section::OBJECT_TYPE: {
+					$resultKey = 'sections';
+					$objectName = Ipam\Api_Section::OBJECT_NAME;
+					$items = $this->_getSectionInfos($name, $fromCurrentPath, null);
+					break;
+				}
+				case Ipam\Api_Folder::OBJECT_TYPE: {
+					$resultKey = 'folders';
+					$objectName = Ipam\Api_Folder::OBJECT_NAME;
+					$items = $this->_getFolderInfos($name, $fromCurrentPath, null);
+					break;
+				}
+				case Ipam\Api_Subnet::OBJECT_TYPE:
+				{
+					$resultKey = 'subnets';
+					$objectName = Ipam\Api_Subnet::OBJECT_NAME;
+					$items = $this->_getSubnetInfos($name, $fromCurrentPath, null);
+					break;
+				}
+				case Ipam\Api_Vlan::OBJECT_TYPE:
+				{
+					$resultKey = 'vlans';
+					$objectName = Ipam\Api_Vlan::OBJECT_NAME;
+					$items = $this->_getVlanInfos($name, $fromCurrentPath, null);
+					break;
+				}
+				case Ipam\Api_Address::OBJECT_TYPE:
+				{
+					$resultKey = 'addresses';
+					$objectName = Ipam\Api_Address::OBJECT_NAME;
+					$items = $this->_getAddressInfos($name, $fromCurrentPath, null);
+					break;
+				}
+				default: {
+					throw new Exception("Unknown type '".$type."'", E_USER_ERROR);
+				}
+			}
+
+			return array($items, $resultKey, $objectName);
+		}
+
+		protected function _printObjectExtra($type, array $items, array $args)
+		{
+			switch($type)
+			{
+				case Ipam\Api_Section::OBJECT_TYPE: {
+					break;
+				}
+				case Ipam\Api_Folder::OBJECT_TYPE: {
+					break;
+				}
+				case Ipam\Api_Subnet::OBJECT_TYPE: {
+					$this->_printSubnetExtra($items, $args);
+					break;
+				}
+				case Ipam\Api_Vlan::OBJECT_TYPE: {
+					break;
+				}
+				case Ipam\Api_Address::OBJECT_TYPE: {
+					break;
+				}
+				default: {
+					throw new Exception("Unknown type '".$type."'", E_USER_ERROR);
+				}
+			}
+		}
+		// --------------------------------------------------
+
+		// OBJECT > SEARCH
+		// --------------------------------------------------
+		public function printSearchObjects(array $args)
+		{
+			if(count($args) === 3)
+			{
+				$time1 = microtime(true);
+				$objects = $this->_searchObjects($args[0], $args[1], $args[2]);
+				$time2 = microtime(true);
+
+				if($objects !== false)
+				{
+					$this->_RESULTS->append($objects);
+					$this->_SHELL->print('RECHERCHE ('.round($time2-$time1).'s)', 'black', 'white', 'bold');
+
+					if(!$this->_SHELL->isOneShotCall())
 					{
-						$vlanId = $currentApi->getVlanId();
-
-						if($vlanId !== false)
+						if(isset($objects['subnets']))
 						{
-							$Ipam_Api_Vlan = new Ipam\Api_Vlan($vlanId);
-							$vlanNumber = $Ipam_Api_Vlan->getNumber();
-							$vlanLabel = $Ipam_Api_Vlan->getName();
+							$counter = count($objects['subnets']);
+							$this->_SHELL->EOL()->print('SUBNETS ('.$counter.')', 'black', 'white');
 
-							$items[Ipam\Api_Subnet::OBJECT_KEY][] = array(
-								'number' => $vlanNumber,
-								'name' => $vlanLabel,
-							);
+							if($counter > 0)
+							{
+								foreach($objects['subnets'] as &$subnet)
+								{	
+									$subnet = array(
+										$subnet['network'].'/'.$subnet['cidrMask'],
+										$subnet['name'],
+										$subnet['sectionName'],
+									);
+								}
+								unset($subnet);
+
+								$table = C\Tools::formatShellTable($objects['subnets']);
+								$this->_SHELL->print($table, 'grey');
+							}
+							else {
+								$this->_SHELL->error('Aucun résultat', 'orange');
+							}
 						}
 
-						$addresses = $currentApi->getAddresses();
-
-						if($addresses !== false)
+						// @todo gerer l2domains
+						if(isset($objects['vlans']))
 						{
-							foreach($addresses as $address)
+							$counter = count($objects['vlans']);
+							$this->_SHELL->EOL()->print('VLANS ('.$counter.')', 'black', 'white');
+
+							if($counter > 0)
 							{
-								$items[Ipam\Api_Address::OBJECT_KEY][] = array(
-									'ip' => $address['ip'],
-									'hostname' => $address['hostname'],
-									'description' => $address['description'],
-									'status' => ucfirst(Ipam\Api_Address::TAGS[$address['tag']]),
-								);
+								foreach($objects['vlans'] as &$vlan)
+								{
+									$vlan = array(
+										$vlan['number'],
+										$vlan['name'],
+										$vlan['description'],
+									);
+								}
+								unset($vlan);
+
+								$table = C\Tools::formatShellTable($objects['vlans']);
+								$this->_SHELL->print($table, 'grey');
+							}
+							else {
+								$this->_SHELL->error('Aucun résultat', 'orange');
+							}
+						}
+
+						if(isset($objects['addresses']))
+						{
+							$counter = count($objects['addresses']);
+							$this->_SHELL->EOL()->print('ADDRESSES ('.$counter.')', 'black', 'white');
+
+							if($counter > 0)
+							{
+								foreach($objects['addresses'] as &$address)
+								{
+									$address = array(
+										$address['ip'],
+										$address['hostname'],
+										$address['description'],
+										$address['subnetPath'],
+									);
+								}
+								unset($address);
+
+								$table = C\Tools::formatShellTable($objects['addresses']);
+								$this->_SHELL->print($table, 'grey');
+							}
+							else {
+								$this->_SHELL->error('Aucun résultat', 'orange');
+							}
+						}
+
+						$this->_SHELL->EOL();
+					}
+				}
+				else {
+					$this->_SHELL->error("Aucun résultat trouvé", 'orange');
+				}
+
+				return true;
+			}
+
+			return false;
+		}
+
+		protected function _searchObjects($path, $objectType, $objectSearch)
+		{
+			switch($objectType)
+			{
+				case 'subnet':
+				case 'subnets': {
+					$subnets = $this->_getSubnetInfos($objectSearch, $this->_searchfromCurrentPath, $path);
+					return array('subnets' => $subnets);
+				}
+				case 'vlan':
+				case 'vlans': {
+					$vlans = $this->_getVlanInfos($objectSearch, $this->_searchfromCurrentPath, $path);
+					return array('vlans' => $vlans);
+				}
+				case 'address':
+				case 'addresses': {
+					$addresses = $this->_getAddressInfos($objectSearch, $this->_searchfromCurrentPath, $path);
+					return array('addresses' => $addresses);
+				}
+				case 'all': {
+					$subnets = $this->_searchObjects($path, 'subnet', $objectSearch);
+					$vlans = $this->_searchObjects($path, 'vlan', $objectSearch);
+					$addresses = $this->_searchObjects($path, 'address', $objectSearch);
+					return array_merge($subnets, $vlans, $addresses);
+				}
+				default: {
+					throw new Exception("Search item '".$objectType."' is unknow", E_USER_ERROR);
+				}
+			}
+		}
+
+		protected function _getSectionResults($section, $fromCurrentPath = true, $path = null)
+		{
+			$sections = array();
+
+			if($fromCurrentPath)
+			{
+				$currentApi = $this->_browser($path);
+
+				if($currentApi instanceof Ipam\Api_Section)
+				{
+					$sectionId = $currentApi->getSubSectionId($section);
+
+					if(isset($sectionId) && $sectionId !== false) {
+						$sections[] = array('id' => $sectionId);
+					}
+				}
+			}
+			else
+			{
+				$sectionNames = Ipam\Api_Section::searchSectionNames($section);
+
+				if(C\Tools::is('array&&count>0', $sectionNames)) {
+					$sections = $sectionNames;
+				}
+			}
+
+			return $sections;
+		}
+
+		protected function _getSectionObjects($section, $fromCurrentPath = true, $path = null)
+		{
+			$sections = $this->_getSectionResults($section, $fromCurrentPath, $path);
+
+			foreach($sections as &$section) {
+				$section = Ipam\Api_Section::factory($section['id']);
+			}
+			unset($section);
+
+			return $sections;
+		}
+
+		protected function _getSectionInfos($section, $fromCurrentPath = true, $path = null)
+		{
+			$items = array();
+
+			$sections = $this->_getSectionObjects($section, $fromCurrentPath, $path);
+
+			foreach($sections as $Ipam_Api_Section)
+			{
+				$sectionName = $Ipam_Api_Section->getName();
+
+				$item = array();
+				$item['header'] = $sectionName;
+				$item['name'] = $sectionName;
+				$item['description'] = $Ipam_Api_Section->getDescription();
+
+				$items[] = $item;
+			}
+
+			return $items;
+		}
+		
+		protected function _getFolderResults($folder, $fromCurrentPath = true, $path = null)
+		{
+			// @todo a coder
+			return array();
+		}
+		
+		protected function _getFolderObjects($folder, $fromCurrentPath = true, $path = null)
+		{
+			$folders = $this->_getFolderResults($folder, $fromCurrentPath, $path);
+
+			foreach($folders as &$folder) {
+				$folder = Ipam\Api_Folder::factory($folder['id']);
+			}
+			unset($folder);
+
+			return $folders;
+		}
+
+		protected function _getFolderInfos($folder, $fromCurrentPath = true, $path = null)
+		{
+			// @todo a coder
+			return array();
+		}
+
+		protected function _getSubnetResults($subnet, $fromCurrentPath = true, $path = null)
+		{
+			$subnets = array();
+
+			if($fromCurrentPath)
+			{
+				$pathApi = $this->_browser($path, false);
+
+				$currentSectionApi = $this->_getLastSectionPath($pathApi);
+
+				if($currentSectionApi !== false)
+				{
+					$currentSectionId = $currentSectionApi->getSectionId();
+					$currentSubnetApi = $this->_getLastSubnetPath($pathApi);
+
+					if($currentSubnetApi !== false) {
+						$currentSubnetId = $currentSubnetApi->getSubnetId();
+					}
+
+					$cidrSubnets = Ipam\Api_Subnet::searchCidrSubnets($subnet);
+					$subnetNames = Ipam\Api_Subnet::searchSubnetNames($subnet);
+
+					foreach(array($cidrSubnets, $subnetNames) as $_subnets)
+					{
+						if(C\Tools::is('array&&count>0', $_subnets))
+						{
+							foreach($_subnets as $subnet)
+							{
+								if($subnet['sectionId'] === (string) $currentSectionId)
+								{
+									if(isset($currentSubnetId))
+									{
+										$Ipam_Api_Subnet = Ipam\Api_Subnet::factory($subnet['id']);
+
+										do
+										{
+											if($Ipam_Api_Subnet->getSubnetId() === $currentSubnetId) {
+												break;
+											}
+										}
+										while(($Ipam_Api_Subnet = $Ipam_Api_Subnet->subnetApi) !== false && $Ipam_Api_Subnet instanceof Ipam\Api_Subnet);
+										// /!\ Parent of IPAM subnet can be folder !
+
+										if($Ipam_Api_Subnet !== false) {
+											$subnets[] = $subnet;
+										}
+									}
+									else {
+										$subnets[] = $subnet;
+									}
+								}
 							}
 						}
 					}
 				}
 			}
 
-			/**
-			  * /!\ index 0 doit toujours être le nom de l'objet ou l'identifiant (VlanID, IP)
-			  */
-			$compare = function($a, $b) {
-				return strnatcasecmp(current($a), current($b));
-			};
+			if(!isset($cidrSubnets))
+			{
+				
+				$cidrSubnets = Ipam\Api_Subnet::searchCidrSubnets($subnet);
+				$subnetNames = Ipam\Api_Subnet::searchSubnetNames($subnet);
 
-			usort($items[Ipam\Api_Section::OBJECT_KEY], $compare);
-			usort($items[Ipam\Api_Folder::OBJECT_KEY], $compare);
-			usort($items[Ipam\Api_Subnet::OBJECT_KEY], $compare);
-			usort($items[Ipam\Api_Vlan::OBJECT_KEY], $compare);
-			usort($items[Ipam\Api_Address::OBJECT_KEY], $compare);
+				foreach(array($cidrSubnets, $subnetNames) as $_subnets)
+				{
+					if(C\Tools::is('array&&count>0', $_subnets)) {
+						$subnets = array_merge($subnets, $_subnets);
+					}
+				}
+			}
 
-			return array(
-				'section' => $items[Ipam\Api_Section::OBJECT_KEY],
-				'folder' => $items[Ipam\Api_Folder::OBJECT_KEY],
-				'subnet' => $items[Ipam\Api_Subnet::OBJECT_KEY],
-				'vlan' => $items[Ipam\Api_Vlan::OBJECT_KEY],
-				'address' => $items[Ipam\Api_Address::OBJECT_KEY]
-			);
+			return $subnets;
 		}
 
+		protected function _getSubnetObjects($subnet, $fromCurrentPath = true, $path = null)
+		{
+			$subnets = $this->_getSubnetResults($subnet, $fromCurrentPath, $path);
+
+			foreach($subnets as &$subnet) {
+				$subnet = Ipam\Api_Subnet::factory($subnet['id']);
+			}
+			unset($subnet);
+
+			return $subnets;
+		}
+
+		protected function _getSubnetInfos($subnet, $fromCurrentPath = true, $path = null)
+		{
+			$items = array();
+
+			$subnet = $this->cleanSubnetNameOfIPv($subnet, $IPv);
+			$subnets = $this->_getSubnetObjects($subnet, $fromCurrentPath, $path);
+
+			foreach($subnets as $Ipam_Api_Subnet)
+			{
+				if(($IPv === 4 || $IPv === 6) && !$Ipam_Api_Subnet->isIPv($IPv)) {
+					continue;
+				}
+
+				$Ipam_Api_Vlan = $Ipam_Api_Subnet->vlanApi;
+
+				$network = $Ipam_Api_Subnet->getNetwork();
+				$cidrMask = $Ipam_Api_Subnet->getCidrMask();
+
+				$item = array();
+				$item['header'] = $network.'/'.$cidrMask;
+				$item['name'] = $Ipam_Api_Subnet->getSubnetLabel();
+				$item['network'] = $network;
+				$item['cidrMask'] = $cidrMask;
+				$item['netMask'] = $Ipam_Api_Subnet->getNetMask();
+				$item['gateway'] = $Ipam_Api_Subnet->getGateway();
+
+				$item['firstIP'] = $Ipam_Api_Subnet->getFirstIp();
+				$item['lastIP'] = $Ipam_Api_Subnet->getLastIp();
+
+				// Un subnet n'a pas forcément de VLAN
+				if($Ipam_Api_Vlan !== false) {
+					$item['vlanNumber'] = $Ipam_Api_Vlan->getNumber();
+					$item['vlanName'] = $Ipam_Api_Vlan->getName();
+				}
+				else {
+					$item['vlanNumber'] = '/';
+					$item['vlanName'] = '/';
+				}
+
+				// Un subnet a forcément une SECTION
+				$item['sectionName'] = $Ipam_Api_Subnet->sectionApi->getName();
+				$item['path'] = DIRECTORY_SEPARATOR.$Ipam_Api_Subnet->getPath(true, DIRECTORY_SEPARATOR);
+
+				$item['usage'] = '';
+				$subnetUsage = $Ipam_Api_Subnet->getUsage();
+
+				foreach($subnetUsage as $fieldName => $fieldValue)
+				{
+					switch($fieldName)
+					{
+						case Ipam\Api_Subnet::USAGE_FIELDS['used']:
+						case Ipam\Api_Subnet::USAGE_FIELDS['total']:
+						case Ipam\Api_Subnet::USAGE_FIELDS['free']: {
+							$item['usage'] .= ucwords($fieldName).': '.$fieldValue.' | ';
+							break;
+						}
+					}
+				}
+
+				$items[] = $item;
+			}
+
+			return $items;
+		}
+
+		protected function _getVlanResults($vlan, $fromCurrentPath = true, $path = null)
+		{
+			$vlans = array();
+
+			if($fromCurrentPath)
+			{
+				$pathApi = $this->_browser($path, false);
+
+				$currentSectionApi = $this->_getLastSectionPath($pathApi);
+
+				if($currentSectionApi !== false)
+				{
+					$currentSectionId = $currentSectionApi->getSectionId();
+					$currentSubnetApi = $this->_getLastSubnetPath($pathApi);
+
+					if($currentSubnetApi !== false) {
+						$currentSubnetId = $currentSubnetApi->getSubnetId();
+					}
+
+					$vlanNumbers = Ipam\Api_Vlan::searchVlanNumbers($vlan);
+					$vlanNames = Ipam\Api_Vlan::searchVlanNames($vlan);
+
+					foreach(array($vlanNumbers, $vlanNames) as $_vlans)
+					{
+						if(C\Tools::is('array&&count>0', $_vlans))
+						{
+							foreach($_vlans as $vlan)
+							{
+								$Ipam_Api_Vlan = Ipam\Api_Vlan::factory($vlan['id']);
+								$subnets = $Ipam_Api_Vlan->getSubnets();
+
+								foreach($subnets as $subnet)
+								{
+									if((isset($currentSubnetId) && $subnet['id'] === (string) $currentSubnetId) ||
+										(!isset($currentSubnetId) && $subnet['sectionId'] === (string) $currentSectionId))
+									{
+										$vlans[] = $vlan;
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if(!isset($vlanNumbers))
+			{
+				$vlanNumbers = Ipam\Api_Vlan::searchVlanNumbers($vlan);
+				$vlanNames = Ipam\Api_Vlan::searchVlanNames($vlan);
+
+				foreach(array($vlanNumbers, $vlanNames) as $_vlans)
+				{
+					if(C\Tools::is('array&&count>0', $_vlans)) {
+						$vlans = array_merge($vlans, $_vlans);
+					}
+				}
+			}
+
+			return $vlans;
+		}
+
+		protected function _getVlanObjects($vlan, $fromCurrentPath = true, $path = null)
+		{
+			$vlans = $this->_getVlanResults($vlan, $fromCurrentPath, $path);
+
+			foreach($vlans as &$vlan) {
+				$vlan = Ipam\Api_Vlan::factory($vlan['id']);
+			}
+			unset($vlan);
+
+			return $vlans;
+		}
+
+		protected function _getVlanInfos($vlan, $fromCurrentPath = true, $path = null)
+		{
+			$items = array();
+
+			$vlans = $this->_getVlanObjects($vlan, $fromCurrentPath, $path);
+
+			foreach($vlans as $Ipam_Api_Vlan)
+			{
+				$vlanName = $Ipam_Api_Vlan->getName();
+				$vlanNumber = $Ipam_Api_Vlan->getNumber();
+				$subnets = $Ipam_Api_Vlan->getSubnets();
+
+				if($subnets !== false)
+				{
+					$subnets = C\Tools::arrayFilter($subnets, $this->_LIST_FIELDS['vlan']['subnet']['fields']);
+
+					foreach($subnets as &$subnet) {
+						$subnet = vsprintf($this->_LIST_FIELDS['vlan']['subnet']['format'], $subnet);
+					}
+					unset($subnet);
+				}
+				else {
+					$subnets = array();
+				}
+
+				$item = array();
+				$item['header'] = $vlanNumber.' '.$vlanName;
+				$item['name'] = $vlanName;
+				$item['number'] = $vlanNumber;
+				$item['description'] = $Ipam_Api_Vlan->getDescription();
+				$item['subnets'] = implode(PHP_EOL, $subnets);
+
+				$items[] = $item;
+			}
+
+			return $items;
+		}
+
+		protected function _getAddressResults($address, $fromCurrentPath = true, $path = null)
+		{
+			$addresses = array();
+
+			if($fromCurrentPath)
+			{
+				$pathApi = $this->_browser($path, false);
+
+				$currentSectionApi = $this->_getLastSectionPath($pathApi);
+
+				if($currentSectionApi !== false)
+				{
+					$currentSectionId = $currentSectionApi->getSectionId();
+					$currentSubnetApi = $this->_getLastSubnetPath($pathApi);
+
+					if($currentSubnetApi !== false) {
+						$currentSubnetId = $currentSubnetApi->getSubnetId();
+					}
+
+					$addressIps = Ipam\Api_Address::searchIpAddresses($address);
+					$addressNames = Ipam\Api_Address::searchAddressNames($address);
+					$addressDescs = Ipam\Api_Address::searchAddressDescs($address);
+
+					foreach(array($addressIps, $addressNames, $addressDescs) as $_addresses)
+					{
+						if(C\Tools::is('array&&count>0', $_addresses))
+						{
+							foreach($_addresses as $address)
+							{
+								$Ipam_Api_Subnet = Ipam\Api_Subnet::factory($address['subnetId']);
+
+								if($Ipam_Api_Subnet->getSectionId() === $currentSectionId)
+								{
+									if(isset($currentSubnetId))
+									{
+										do
+										{
+											if($Ipam_Api_Subnet->getSubnetId() === $currentSubnetId) {
+												break;
+											}
+										}
+										while(($Ipam_Api_Subnet = $Ipam_Api_Subnet->subnetApi) !== false);
+
+										if($Ipam_Api_Subnet !== false) {
+											$addresses[] = $address;
+										}
+									}
+									else {
+										$addresses[] = $address;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if(!isset($addressIps))
+			{
+				$addressIps = Ipam\Api_Address::searchIpAddresses($address);
+				$addressNames = Ipam\Api_Address::searchAddressNames($address);
+				$addressDescs = Ipam\Api_Address::searchAddressDescs($address);
+
+				foreach(array($addressIps, $addressNames, $addressDescs) as $_addresses)
+				{
+					if(C\Tools::is('array&&count>0', $_addresses)) {
+						$addresses = array_merge($addresses, $_addresses);
+					}
+				}
+			}
+
+			return $addresses;
+		}
+
+		protected function _getAddressObjects($address, $fromCurrentPath = true, $path = null)
+		{
+			$addresses = $this->_getAddressResults($address, $fromCurrentPath, $path);
+
+			foreach($addresses as &$address) {
+				$address = Ipam\Api_Address::factory($address['id']);
+			}
+			unset($address);
+
+			return $addresses;
+		}
+
+		protected function _getAddressInfos($address, $fromCurrentPath = true, $path = null)
+		{
+			$items = array();
+
+			$addresses = $this->_getAddressObjects($address, $fromCurrentPath, $path);
+
+			foreach($addresses as $Ipam_Api_Address)
+			{
+				$Ipam_Api_Subnet = $Ipam_Api_Address->getSubnetApi();
+				$Ipam_Api_Vlan = $Ipam_Api_Subnet->getVlanApi();
+
+				$ip = $Ipam_Api_Address->getIp();
+				$cidrMask = $Ipam_Api_Subnet->getCidrMask();
+
+				$item = array();
+				$item['header'] = $ip.'/'.$cidrMask;
+				$item['ip'] = $ip;
+				$item['cidrMask'] = $cidrMask;
+				$item['netMask'] = $Ipam_Api_Subnet->getNetMask();
+				$item['subnet'] = $Ipam_Api_Subnet->getCidrSubnet();
+				$item['gateway'] = $Ipam_Api_Subnet->getGateway();
+				$item['hostname'] = $Ipam_Api_Address->getHostname();
+				$item['description'] = $Ipam_Api_Address->getDescription();
+				$item['status'] = ucfirst(Ipam\Api_Address::TAGS[$Ipam_Api_Address->getTag()]);
+				$item['note'] = $Ipam_Api_Address->getNote();
+				$item['subnetPath'] = DIRECTORY_SEPARATOR.$Ipam_Api_Subnet->getPath(true, DIRECTORY_SEPARATOR);
+
+				if($Ipam_Api_Vlan instanceof Ipam\Api_Vlan) {
+					$item['vlanNumber'] = $Ipam_Api_Vlan->getNumber();
+					$item['VlanName'] = $Ipam_Api_Vlan->getName();
+				}
+
+				$items[] = $item;
+			}
+
+			return $items;
+		}
+		// --------------------------------------------------
+
+		// // Service_Cli_Abstract : SYSTEM METHODS
+		// --------------------------------------------------
 		public function printObjectInfos(array $args, $fromCurrentContext = true)
 		{
 			// /!\ ls AUB --> On ne doit pas afficher AUB mais le contenu de AUB !
@@ -305,730 +1109,140 @@
 			}
 		}
 
-		public function printSectionInfos(array $args, $fromCurrentPath = true)
+		protected function _getObjects($context = null, array $args = null)
 		{
-			if(isset($args[0]))
+			$path = $context;
+
+			$items = array(
+				Ipam\Api_Section::OBJECT_TYPE => array(),
+				Ipam\Api_Folder::OBJECT_TYPE => array(),
+				Ipam\Api_Subnet::OBJECT_TYPE => array(),
+				Ipam\Api_Vlan::OBJECT_TYPE => array(),
+				Ipam\Api_Address::OBJECT_TYPE => array(),
+			);
+
+			$currentApi = $this->_browser($path);
+			$currentType = $currentApi::OBJECT_TYPE;
+
+			/**
+			  * Utiliser pour Addon\Ipam\Api_Subnet la fonction
+			  * permettant de rechercher à la fois un nom et un subnet
+			  */
+			$cases = array(
+				Ipam\Api_Section::OBJECT_TYPE => array(
+					Ipam\Api_Section::class => 'findSections',
+					Ipam\Api_Folder::class => 'findFolders',
+					Ipam\Api_Subnet::class => 'findSubnets',
+				),
+				Ipam\Api_Folder::OBJECT_TYPE => array(
+					Ipam\Api_Folder::class => 'findFolders',
+					Ipam\Api_Subnet::class => 'findSubnets',
+				),
+				Ipam\Api_Subnet::OBJECT_TYPE => array(
+					Ipam\Api_Subnet::class => 'findSubnets',
+				),
+			);
+
+			if(array_key_exists($currentType, $cases))
 			{
-				$infos = $this->_getSectionInfos($args[0], $fromCurrentPath);
-
-				if(!$this->_SHELL->isOneShotCall())
+				foreach($cases[$currentType] as $objectClass => $objectMethod)
 				{
-					$status = $this->_printInformations('section', $infos);
-
-					if($status === false) {
-						$this->_SHELL->error("Section introuvable", 'orange');
-					}
-				}
-				else {
-					$this->_RESULTS->setValue($infos);
-				}
-
-				return true;
-			}
-
-			return false;
-		}
-
-		public function printFolderInfos(array $args, $fromCurrentPath = true)
-		{
-			if(isset($args[0]))
-			{
-				$infos = $this->_getFolderInfos($args[0], $fromCurrentPath);
-
-				if(!$this->_SHELL->isOneShotCall())
-				{
-					$status = $this->_printInformations('folder', $infos);
-
-					if($status === false) {
-						$this->_SHELL->error("Dossier introuvable", 'orange');
-					}
-				}
-				else {
-					$this->_RESULTS->setValue($infos);
-				}
-
-				return true;
-			}
-
-			return false;
-		}
-
-		public function printSubnetInfos(array $args, $fromCurrentPath = true)
-		{
-			if(isset($args[0]))
-			{
-				$infos = $this->_getSubnetInfos($args[0], $fromCurrentPath);
-
-				if(!$this->_SHELL->isOneShotCall())
-				{
-					$status = $this->_printInformations('subnet', $infos);
-
-					if($status === false) {
-						$this->_SHELL->error("Subnet introuvable", 'orange');
+					if($objectMethod !== false) {
+						$objects = call_user_func(array($currentApi, $objectMethod), '*');
 					}
 					else {
-						$this->printSubnetExtra($infos);
-					}
-				}
-				else {
-					$this->_RESULTS->setValue($infos);
-				}
-
-				return true;
-			}
-
-			return false;
-		}
-
-		public function printVlanInfos(array $args, $fromCurrentPath = true)
-		{
-			if(isset($args[0]))
-			{
-				$infos = $this->_getVlanInfos($args[0], $fromCurrentPath);
-
-				if(!$this->_SHELL->isOneShotCall())
-				{
-					$status = $this->_printInformations('vlan', $infos);
-
-					if($status === false) {
-						$this->_SHELL->error("VLAN introuvable", 'orange');
-					}
-				}
-				else {
-					$this->_RESULTS->setValue($infos);
-				}
-
-				return true;
-			}
-
-			return false;
-		}
-
-		public function printAddressInfos(array $args, $fromCurrentPath = true)
-		{
-			if(isset($args[0]))
-			{
-				$infos = $this->_getAddressInfos($args[0], $fromCurrentPath);
-
-				if(!$this->_SHELL->isOneShotCall())
-				{
-					$status = $this->_printInformations('address', $infos);
-
-					if($status === false) {
-						$this->_SHELL->error("Adresse introuvable", 'orange');
-					}
-				}
-				else {
-					$this->_RESULTS->setValue($infos);
-				}
-
-				return true;
-			}
-
-			return false;
-		}
-
-		protected function printSubnetExtra(array $infos)
-		{
-			if(count($infos) === 1) {
-				$path = $infos[0]['path'].'/'.$infos[0]['name'];
-				$this->printObjectsList($path);
-			}
-		}
-
-		protected function _getSectionInfos($section, $fromCurrentPath = true, $path = null)
-		{
-			$items = array();
-			$sections = array();
-
-			if($fromCurrentPath)
-			{
-				$currentApi = $this->_browser($path);
-
-				if($currentApi instanceof Ipam\Api_Section)
-				{
-					$sectionId = $currentApi->getSubSectionId($section);
-
-					if(isset($sectionId) && $sectionId !== false) {
-						$sections[] = array('id' => $sectionId);
-					}
-				}
-			}
-			else
-			{
-				$sectionNames = Ipam\Api_Section::searchSectionNames($section);
-
-				if(C\Tools::is('array&&count>0', $sectionNames)) {
-					$sections = $sectionNames;
-				}
-			}
-
-			foreach($sections as $section)
-			{
-				$Ipam_Api_Section = new Ipam\Api_Section($section['id']);
-
-				$sectionName = $Ipam_Api_Section->getName();
-
-				$item = array();
-				$item['header'] = $sectionName;
-				$item['name'] = $sectionName;
-				$item['description'] = $Ipam_Api_Section->getDescription();
-
-				$items[] = $item;
-			}
-
-			return $items;
-		}
-
-		protected function _getFolderInfos($subnet, $fromCurrentPath = true, $path = null)
-		{
-			// @todo a coder
-			return array();
-		}
-
-		protected function _getSubnetInfos($subnet, $fromCurrentPath = true, $path = null)
-		{
-			$items = array();
-			$subnets = array();
-
-			$subnet = $this->cleanSubnetNameOfIPv($subnet, $IPv);
-
-			if($fromCurrentPath)
-			{
-				$pathApi = $this->_browser($path, false);
-
-				$currentSectionApi = $this->_getLastSectionPath($pathApi);
-
-				if($currentSectionApi !== false)
-				{
-					$currentSectionId = $currentSectionApi->getSectionId();
-					$currentSubnetApi = $this->_getLastSubnetPath($pathApi);
-
-					if($currentSubnetApi !== false) {
-						$currentSubnetId = $currentSubnetApi->getSubnetId();
+						$objects = false;
 					}
 
-					$cidrSubnets = Ipam\Api_Subnet::searchCidrSubnets($subnet);
-					$subnetNames = Ipam\Api_Subnet::searchSubnetNames($subnet);
-
-					foreach(array($cidrSubnets, $subnetNames) as $_subnets)
+					if(C\Tools::is('array&&count>0', $objects))
 					{
-						if(C\Tools::is('array&&count>0', $_subnets))
+						$objectType = $objectClass::OBJECT_TYPE;
+
+						foreach($objects as $object)
 						{
-							foreach($_subnets as $subnet)
+							switch($objectType)
 							{
-								if($subnet['sectionId'] === (string) $currentSectionId)
+								case Ipam\Api_Subnet::OBJECT_TYPE:
 								{
-									if(isset($currentSubnetId))
-									{
-										$Api_Subnet_Abstract = new Ipam\Api_Subnet($subnet['id']);
-
-										do
-										{
-											if($Ipam_Api_Subnet->getSubnetId() === $currentSubnetId) {
-												break;
-											}
-										}
-										while(($Ipam_Api_Subnet = $Ipam_Api_Subnet->subnetApi) !== false && $Ipam_Api_Subnet instanceof Ipam\Api_Subnet);
-										// /!\ Parent of IPAM subnet can be folder !
-
-										if($Ipam_Api_Subnet !== false) {
-											$subnets[] = $subnet;
-										}
+									if(!C\Tools::is('string&&!empty', $object[$objectClass::FIELD_NAME])) {
+										$object[$objectClass::FIELD_NAME] = $object['subnet'].'/'.$object['mask'];
 									}
 									else {
-										$subnets[] = $subnet;
+										$object = $this->formatSubnetNameWithIPv($object, true);
 									}
+
+									$items[$objectType][] = array(
+										'name' => $object[$objectClass::FIELD_NAME],
+										'subnet' => $object['subnet'],
+										'mask' => $object['mask'],
+									);
+									break;
+								}
+								default: {
+									$items[$objectType][] = array('name' => $object[$objectClass::FIELD_NAME]);
 								}
 							}
 						}
 					}
-				}
-			}
-
-			if(!isset($cidrSubnets))
-			{
-				
-				$cidrSubnets = Ipam\Api_Subnet::searchCidrSubnets($subnet);
-				$subnetNames = Ipam\Api_Subnet::searchSubnetNames($subnet);
-
-				foreach(array($cidrSubnets, $subnetNames) as $_subnets)
-				{
-					if(C\Tools::is('array&&count>0', $_subnets)) {
-						$subnets = array_merge($subnets, $_subnets);
-					}
-				}
-			}
-
-			foreach($subnets as $subnet)
-			{
-				$Ipam_Api_Subnet = new Ipam\Api_Subnet($subnet['id']);
-
-				if(($IPv === 4 || $IPv === 6) && !$Ipam_Api_Subnet->isIPv($IPv)) {
-					continue;
-				}
-
-				$Ipam_Api_Vlan = $Ipam_Api_Subnet->vlanApi;
-
-				$network = $Ipam_Api_Subnet->getNetwork();
-				$cidrMask = $Ipam_Api_Subnet->getCidrMask();
-
-				$item = array();
-				$item['header'] = $network.'/'.$cidrMask;
-				$item['name'] = $Ipam_Api_Subnet->getSubnetLabel();
-				$item['network'] = $network;
-				$item['cidrMask'] = $cidrMask;
-				$item['netMask'] = $Ipam_Api_Subnet->getNetMask();
-				$item['gateway'] = $Ipam_Api_Subnet->getGateway();
-
-				if($Ipam_Api_Subnet->isIPv4()) {
-					$item['networkIP'] = $Ipam_Api_Subnet->getNetworkIp();
-					$item['broadcastIP'] = $Ipam_Api_Subnet->getBroadcastIp();
-				}
-				elseif($Ipam_Api_Subnet->isIPv6()) {
-					$item['firstIP'] = $Ipam_Api_Subnet->getFirstIp();
-					$item['lastIP'] = $Ipam_Api_Subnet->getLastIp();
-				}
-
-				// Un subnet n'a pas forcément de VLAN
-				if($Ipam_Api_Vlan !== false) {
-					$item['vlanNumber'] = $Ipam_Api_Vlan->getNumber();
-					$item['vlanName'] = $Ipam_Api_Vlan->getName();
-				}
-				else {
-					$item['vlanNumber'] = '/';
-					$item['vlanName'] = '/';
-				}
-
-				// Un subnet a forcément une SECTION
-				$item['sectionName'] = $Ipam_Api_Subnet->sectionApi->getName();
-				$item['path'] = DIRECTORY_SEPARATOR.$Ipam_Api_Subnet->getPath(true, DIRECTORY_SEPARATOR);
-
-				$item['usage'] = '';
-				$subnetUsage = $Ipam_Api_Subnet->getUsage();
-
-				foreach($subnetUsage as $fieldName => $fieldValue)
-				{
-					switch($fieldName)
+					elseif($currentApi instanceof Ipam\Api_Subnet)
 					{
-						case Ipam\Api_Subnet::USAGE_FIELDS['used']:
-						case Ipam\Api_Subnet::USAGE_FIELDS['total']:
-						case Ipam\Api_Subnet::USAGE_FIELDS['free']: {
-							$item['usage'] .= ucwords($fieldName).': '.$fieldValue.' | ';
-							break;
-						}
-					}
-				}
+						$vlanId = $currentApi->getVlanId();
 
-				$items[] = $item;
-			}
-
-			return $items;
-		}
-
-		protected function _getVlanInfos($vlan, $fromCurrentPath = true, $path = null)
-		{
-			$items = array();
-			$vlans = array();
-
-			if($fromCurrentPath)
-			{
-				$pathApi = $this->_browser($path, false);
-
-				$currentSectionApi = $this->_getLastSectionPath($pathApi);
-
-				if($currentSectionApi !== false)
-				{
-					$currentSectionId = $currentSectionApi->getSectionId();
-					$currentSubnetApi = $this->_getLastSubnetPath($pathApi);
-
-					if($currentSubnetApi !== false) {
-						$currentSubnetId = $currentSubnetApi->getSubnetId();
-					}
-
-					$vlanNumbers = Ipam\Api_Vlan::searchVlanNumbers($vlan);
-					$vlanNames = Ipam\Api_Vlan::searchVlanNames($vlan);
-
-					foreach(array($vlanNumbers, $vlanNames) as $_vlans)
-					{
-						if(C\Tools::is('array&&count>0', $_vlans))
+						if($vlanId !== false)
 						{
-							foreach($_vlans as $vlan)
-							{
-								$Ipam_Api_Vlan = new Ipam\Api_Vlan($vlan['id']);
-								$subnets = $Ipam_Api_Vlan->getSubnets();
+							$Ipam_Api_Vlan = Ipam\Api_Vlan::factory($vlanId);
 
-								foreach($subnets as $subnet)
-								{
-									if((isset($currentSubnetId) && $subnet['id'] === (string) $currentSubnetId) ||
-										(!isset($currentSubnetId) && $subnet['sectionId'] === (string) $currentSectionId))
-									{
-										$vlans[] = $vlan;
-										break;
-									}
-								}
-							}
+							$vlanNumber = $Ipam_Api_Vlan->getNumber();
+							$vlanLabel = $Ipam_Api_Vlan->getName();
+
+							$items[Ipam\Api_Vlan::OBJECT_TYPE][] = array(
+								'number' => $vlanNumber,
+								'name' => $vlanLabel,
+							);
 						}
-					}
-				}
-			}
 
-			if(!isset($vlanNumbers))
-			{
-				$vlanNumbers = Ipam\Api_Vlan::searchVlanNumbers($vlan);
-				$vlanNames = Ipam\Api_Vlan::searchVlanNames($vlan);
+						$addresses = $currentApi->getAddresses();
 
-				foreach(array($vlanNumbers, $vlanNames) as $_vlans)
-				{
-					if(C\Tools::is('array&&count>0', $_vlans)) {
-						$vlans = array_merge($vlans, $_vlans);
-					}
-				}
-			}
-
-			foreach($vlans as $vlan)
-			{
-				$Ipam_Api_Vlan = new Ipam\Api_Vlan($vlan['id']);
-
-				$vlanName = $Ipam_Api_Vlan->getName();
-				$vlanNumber = $Ipam_Api_Vlan->getNumber();
-				$subnets = $Ipam_Api_Vlan->getSubnets();
-
-				if($subnets !== false)
-				{
-					$subnets = C\Tools::arrayFilter($subnets, $this->_LIST_FIELDS['vlan']['subnet']['fields']);
-
-					foreach($subnets as &$subnet) {
-						$subnet = vsprintf($this->_LIST_FIELDS['vlan']['subnet']['format'], $subnet);
-					}
-				}
-				else {
-					$subnets = array();
-				}
-
-				$item = array();
-				$item['header'] = $vlanNumber.' '.$vlanName;
-				$item['name'] = $vlanName;
-				$item['number'] = $vlanNumber;
-				$item['description'] = $Ipam_Api_Vlan->getDescription();
-				$item['subnets'] = implode(PHP_EOL, $subnets);
-
-				$items[] = $item;
-			}
-
-			return $items;
-		}
-
-		protected function _getAddressInfos($address, $fromCurrentPath = true, $path = null)
-		{
-			$items = array();
-			$addresses = array();
-
-			if($fromCurrentPath)
-			{
-				$pathApi = $this->_browser($path, false);
-
-				$currentSectionApi = $this->_getLastSectionPath($pathApi);
-
-				if($currentSectionApi !== false)
-				{
-					$currentSectionId = $currentSectionApi->getSectionId();
-					$currentSubnetApi = $this->_getLastSubnetPath($pathApi);
-
-					if($currentSubnetApi !== false) {
-						$currentSubnetId = $currentSubnetApi->getSubnetId();
-					}
-
-					$addressIps = Ipam\Api_Address::searchIpAddresses($address);
-					$addressNames = Ipam\Api_Address::searchAddressNames($address);
-					$addressDescs = Ipam\Api_Address::searchAddressDescs($address);
-
-					foreach(array($addressIps, $addressNames, $addressDescs) as $_addresses)
-					{
-						if(C\Tools::is('array&&count>0', $_addresses))
+						if($addresses !== false)
 						{
-							foreach($_addresses as $address)
+							foreach($addresses as $address)
 							{
-								$Ipam_Api_Subnet = new Ipam\Api_Subnet($address['subnetId']);
-
-								if($Ipam_Api_Subnet->getSectionId() === $currentSectionId)
-								{
-									if(isset($currentSubnetId))
-									{
-										do
-										{
-											if($Ipam_Api_Subnet->getSubnetId() === $currentSubnetId) {
-												break;
-											}
-										}
-										while(($Ipam_Api_Subnet = $Ipam_Api_Subnet->subnetApi) !== false);
-
-										if($Ipam_Api_Subnet !== false) {
-											$addresses[] = $address;
-										}
-									}
-									else {
-										$addresses[] = $address;
-									}
-								}
+								$items[Ipam\Api_Address::OBJECT_TYPE][] = array(
+									'ip' => $address['ip'],
+									'hostname' => $address['hostname'],
+									'description' => $address['description'],
+									'status' => ucfirst(Ipam\Api_Address::TAGS[$address['tag']]),
+								);
 							}
 						}
 					}
 				}
 			}
 
-			if(!isset($addressIps))
-			{
-				$addressIps = Ipam\Api_Address::searchIpAddresses($address);
-				$addressNames = Ipam\Api_Address::searchAddressNames($address);
-				$addressDescs = Ipam\Api_Address::searchAddressDescs($address);
+			/**
+			  * /!\ index 0 doit toujours être le nom de l'objet ou l'identifiant (VlanID, IP)
+			  */
+			$compare = function($a, $b) {
+				return strnatcasecmp(current($a), current($b));
+			};
 
-				foreach(array($addressIps, $addressNames, $addressDescs) as $_addresses)
-				{
-					if(C\Tools::is('array&&count>0', $_addresses)) {
-						$addresses = array_merge($addresses, $_addresses);
-					}
-				}
-			}
+			usort($items[Ipam\Api_Section::OBJECT_TYPE], $compare);
+			usort($items[Ipam\Api_Folder::OBJECT_TYPE], $compare);
+			usort($items[Ipam\Api_Subnet::OBJECT_TYPE], $compare);
+			usort($items[Ipam\Api_Vlan::OBJECT_TYPE], $compare);
+			usort($items[Ipam\Api_Address::OBJECT_TYPE], $compare);
 
-			foreach($addresses as $address)
-			{
-				$Ipam_Api_Address = new Ipam\Api_Address($address['id']);
-				$Ipam_Api_Subnet = $Ipam_Api_Address->getSubnetApi();
-				$Ipam_Api_Vlan = $Ipam_Api_Subnet->getVlanApi();
-
-				$ip = $Ipam_Api_Address->getIp();
-				$cidrMask = $Ipam_Api_Subnet->getCidrMask();
-
-				$item = array();
-				$item['header'] = $ip.'/'.$cidrMask;
-				$item['ip'] = $ip;
-				$item['cidrMask'] = $cidrMask;
-				$item['netMask'] = $Ipam_Api_Subnet->getNetMask();
-				$item['subnet'] = $Ipam_Api_Subnet->getCidrSubnet();
-				$item['gateway'] = $Ipam_Api_Subnet->getGateway();
-				$item['hostname'] = $Ipam_Api_Address->getHostname();
-				$item['description'] = $Ipam_Api_Address->getDescription();
-				$item['status'] = ucfirst(Ipam\Api_Address::TAGS[$Ipam_Api_Address->getTag()]);
-				$item['note'] = $Ipam_Api_Address->getNote();
-				$item['subnetPath'] = DIRECTORY_SEPARATOR.$Ipam_Api_Subnet->getPath(true, DIRECTORY_SEPARATOR);
-
-				if($Ipam_Api_Vlan instanceof Ipam\Api_Vlan) {
-					$item['vlanNumber'] = $Ipam_Api_Vlan->getNumber();
-					$item['VlanName'] = $Ipam_Api_Vlan->getName();
-				}
-
-				$items[] = $item;
-			}
-
-			return $items;
+			return array(
+				'section' => $items[Ipam\Api_Section::OBJECT_TYPE],
+				'folder' => $items[Ipam\Api_Folder::OBJECT_TYPE],
+				'subnet' => $items[Ipam\Api_Subnet::OBJECT_TYPE],
+				'vlan' => $items[Ipam\Api_Vlan::OBJECT_TYPE],
+				'address' => $items[Ipam\Api_Address::OBJECT_TYPE]
+			);
 		}
+		// --------------------------------------------------
 
-		public function printSearchObjects(array $args)
-		{
-			if(count($args) === 3)
-			{
-				$time1 = microtime(true);
-				$objects = $this->_searchObjects($args[0], $args[1], $args[2]);
-				$time2 = microtime(true);
-
-				if($objects !== false)
-				{
-					$this->_RESULTS->append($objects);
-					$this->_SHELL->print('RECHERCHE ('.round($time2-$time1).'s)', 'black', 'white', 'bold');
-
-					if(!$this->_SHELL->isOneShotCall())
-					{
-						if(isset($objects['subnets']))
-						{
-							$counter = count($objects['subnets']);
-							$this->_SHELL->EOL()->print('SUBNETS ('.$counter.')', 'black', 'white');
-
-							if($counter > 0)
-							{
-								foreach($objects['subnets'] as $subnet)
-								{
-									$text1 = '['.$subnet['sectionName'].']';
-									$text1 .= C\Tools::t($text1, "\t", 2, 0, 8);
-									$text2 = $subnet['network'].'/'.$subnet['cidrMask'];
-									$text2 .= C\Tools::t($text2, "\t", 4, 0, 8);
-									$text3 = '{'.$subnet['name'].'}';
-									$this->_SHELL->print($text1.$text2.$text3, 'grey');
-								}
-							}
-							else {
-								$this->_SHELL->error('Aucun résultat', 'orange');
-							}
-						}
-
-						// @todo gerer l2domains
-						if(isset($objects['vlans']))
-						{
-							$counter = count($objects['vlans']);
-							$this->_SHELL->EOL()->print('VLANS ('.$counter.')', 'black', 'white');
-
-							if($counter > 0)
-							{
-								foreach($objects['vlans'] as $vlan)
-								{
-									$text1 = '[default]';
-									//$text1 = '['.$vlan['domainName'].']';
-									$text1 .= C\Tools::t($text1, "\t", 2, 0, 8);
-									$text2 = $vlan['number'].' '.$vlan['name'];
-									$text2 .= C\Tools::t($text2, "\t", 4, 0, 8);
-									$text3 = '{'.$vlan['description'].'}';
-									$this->_SHELL->print($text1.$text2.$text3, 'grey');
-								}
-							}
-							else {
-								$this->_SHELL->error('Aucun résultat', 'orange');
-							}
-						}
-
-						if(isset($objects['addresses']))
-						{
-							$counter = count($objects['addresses']);
-							$this->_SHELL->EOL()->print('ADDRESSES ('.$counter.')', 'black', 'white');
-
-							if($counter > 0)
-							{
-								foreach($objects['addresses'] as $address)
-								{
-									$text1 = '['.$address['subnetPath'].']';
-									$text1 .= C\Tools::t($text1, "\t", 7, 0, 8);
-									$text2 = $address['ip'];
-									$text2 .= C\Tools::t($text2, "\t", 4, 0, 8);
-									$text3 = $address['hostname'].' {'.$address['description'].'}';
-									$this->_SHELL->print($text1.$text2.$text3, 'grey');
-								}
-							}
-							else {
-								$this->_SHELL->error('Aucun résultat', 'orange');
-							}
-						}
-
-						$this->_SHELL->EOL();
-					}
-				}
-				else {
-					$this->_SHELL->error("Aucun résultat trouvé", 'orange');
-				}
-
-				return true;
-			}
-
-			return false;
-		}
-
-		protected function _searchObjects($path, $objectType, $objectSearch)
-		{
-			switch($objectType)
-			{
-				case 'subnet':
-				{
-					$subnets = $this->_getSubnetInfos($objectSearch, $this->_searchfromCurrentPath, $path);
-					return array('subnets' => $subnets);
-					break;
-				}
-				case 'vlan':
-				{
-					$vlans = $this->_getVlanInfos($objectSearch, $this->_searchfromCurrentPath, $path);
-					return array('vlans' => $vlans);
-					break;
-				}
-				case 'address':
-				{
-					$addresses = $this->_getAddressInfos($objectSearch, $this->_searchfromCurrentPath, $path);
-					return array('addresses' => $addresses);
-					break;
-				}
-				case 'all':
-				{
-					$subnets = $this->_searchObjects($path, 'subnet', $objectSearch);
-					$vlans = $this->_searchObjects($path, 'vlan', $objectSearch);
-					$addresses = $this->_searchObjects($path, 'address', $objectSearch);
-					return array_merge($subnets, $vlans, $addresses);
-					break;
-				}
-				default: {
-					throw new Exception("Search item '".$objectType."' is unknow", E_USER_ERROR);
-				}
-			}
-		}
-
-		protected function _getLastSectionPath(array $pathApi)
-		{
-			$lastSectionApi = $this->_searchLastPathApi($pathApi, 'Addon\Ipam\Api_Section');
-			// /!\ La toute 1ere section n'existe pas, voir App\Ipam\Shell_Ipam::_moveToRoot
-			return ($lastSectionApi !== false && $lastSectionApi->sectionExists()) ? ($lastSectionApi) : (false);
-		}
-
-		protected function _getLastSubnetPath(array $pathApi)
-		{
-			return $this->_searchLastPathApi($pathApi, 'Addon\Ipam\Api_Subnet');
-		}
-
-		public function subnetNameHasIPv($name, &$IPv = array())
-		{
-			return (bool) preg_match('/(#IPv[46])$/i', $name, $IPv);
-		}
-
-		public function cleanSubnetNameOfIPv($name, &$IPv = null)
-		{
-			$hasIPv = $this->subnetNameHasIPv($name, $IPv);
-
-			if($hasIPv) {
-				$IPv = (int) substr($IPv[0], -1, 1);
-				$name = preg_replace('/(#IPv[46])$/i', '', $name);
-			}
-			else {
-				$IPv = false;
-			}
-
-			return $name;
-		}
-
-		public function formatSubnetNameWithIPv(array $subnet, $throwException = true)
-		{
-			$cidrSubnet = $subnet['subnet'].'/'.$subnet['mask'];
-
-			if(Ipam\Tools::isSubnetV4($cidrSubnet)) {
-				$subnet[Ipam\Api_Subnet::FIELD_NAME] .= '#IPv4';
-			}
-			elseif(Ipam\Tools::isSubnetV6($cidrSubnet)) {
-				$subnet[Ipam\Api_Subnet::FIELD_NAME] .= '#IPv6';
-			}
-			elseif($throwException) {
-				throw new Exception("Subnet '".$subnet[Ipam\Api_Subnet::FIELD_NAME]."' is not a valid IPv4/IPv6 subnet", E_USER_ERROR);
-			}
-			else {
-				return false;
-			}
-
-			return $subnet;
-		}
-
-		public function formatSubnetCidrToPath($subnet)
-		{
-			if(is_array($subnet)) {
-				$subnet[Ipam\Api_Subnet::FIELD_NAME] = str_replace('/', '_', $subnet[Ipam\Api_Subnet::FIELD_NAME]);
-			}
-			elseif(is_string($subnet)) {
-				$subnet = str_replace('/', '_', $subnet);
-			}
-			else {
-				return false;
-			}
-
-			return $subnet;
-		}
-
-		public function formatSubnetPathToCidr($subnet)
-		{
-			return preg_replace('#^([0-9.:]+)_([0-9]{1,3})$#i', '\1/\2', $subnet);
-		}
-
-		// CREATE & MODIFY & REMOVE
+		// ADDRESSES : CREATE & MODIFY & REMOVE
 		// --------------------------------------------------
 		public function createAddress(array $args)
 		{
@@ -1114,7 +1328,8 @@
 							break;
 						}
 						case 1: {
-							$Ipam_Api_Address = new Ipam\Api_Address($addresses[0][Ipam\Api_Address::FIELD_ID]);
+							$addressId = $addresses[0][Ipam\Api_Address::FIELD_ID];
+							$Ipam_Api_Address = Ipam\Api_Address::factory($addressId);
 							break;
 						}
 						default: {
@@ -1187,7 +1402,8 @@
 							break;
 						}
 						case 1: {
-							$Ipam_Api_Address = new Ipam\Api_Address($addresses[0][Ipam\Api_Address::FIELD_ID]);
+							$addressId = $addresses[0][Ipam\Api_Address::FIELD_ID];
+							$Ipam_Api_Address = Ipam\Api_Address::factory($addressId);
 							break;
 						}
 						default: {
@@ -1237,6 +1453,78 @@
 			return false;
 		}
 		// --------------------------------------------------
+
+		protected function _getLastSectionPath(array $pathApi)
+		{
+			$lastSectionApi = $this->_searchLastPathApi($pathApi, 'Addon\Ipam\Api_Section');
+			// /!\ La toute 1ere section n'existe pas, voir App\Ipam\Shell_Ipam::_moveToRoot
+			return ($lastSectionApi !== false && $lastSectionApi->sectionExists()) ? ($lastSectionApi) : (false);
+		}
+
+		protected function _getLastSubnetPath(array $pathApi)
+		{
+			return $this->_searchLastPathApi($pathApi, 'Addon\Ipam\Api_Subnet');
+		}
+
+		public function subnetNameHasIPv($name, &$IPv = array())
+		{
+			return (bool) preg_match('/(#IPv[46])$/i', $name, $IPv);
+		}
+
+		public function cleanSubnetNameOfIPv($name, &$IPv = null)
+		{
+			$hasIPv = $this->subnetNameHasIPv($name, $IPv);
+
+			if($hasIPv) {
+				$IPv = (int) substr($IPv[0], -1, 1);
+				$name = preg_replace('/(#IPv[46])$/i', '', $name);
+			}
+			else {
+				$IPv = false;
+			}
+
+			return $name;
+		}
+
+		public function formatSubnetNameWithIPv(array $subnet, $throwException = true)
+		{
+			$cidrSubnet = $subnet['subnet'].'/'.$subnet['mask'];
+
+			if(Ipam\Tools::isSubnetV4($cidrSubnet)) {
+				$subnet[Ipam\Api_Subnet::FIELD_NAME] .= '#IPv4';
+			}
+			elseif(Ipam\Tools::isSubnetV6($cidrSubnet)) {
+				$subnet[Ipam\Api_Subnet::FIELD_NAME] .= '#IPv6';
+			}
+			elseif($throwException) {
+				throw new Exception("Subnet '".$subnet[Ipam\Api_Subnet::FIELD_NAME]."' is not a valid IPv4/IPv6 subnet", E_USER_ERROR);
+			}
+			else {
+				return false;
+			}
+
+			return $subnet;
+		}
+
+		public function formatSubnetCidrToPath($subnet)
+		{
+			if(is_array($subnet)) {
+				$subnet[Ipam\Api_Subnet::FIELD_NAME] = str_replace('/', '_', $subnet[Ipam\Api_Subnet::FIELD_NAME]);
+			}
+			elseif(is_string($subnet)) {
+				$subnet = str_replace('/', '_', $subnet);
+			}
+			else {
+				return false;
+			}
+
+			return $subnet;
+		}
+
+		public function formatSubnetPathToCidr($subnet)
+		{
+			return preg_replace('#^([0-9.:]+)_([0-9]{1,3})$#i', '\1/\2', $subnet);
+		}
 
 		// ----------------- AutoCompletion -----------------
 		public function shellAutoC_cd($cmd, $search = null)
@@ -1389,7 +1677,7 @@
 		}
 
 		/**
-		  * @param Addon\Dcim\Api_Abstract $baseApi
+		  * @param Addon\Ipam\Api_Abstract $baseApi
 		  * @param null|string $search
 		  * @return Core\StatusValue
 		  */
@@ -1412,7 +1700,7 @@
 					$sections = array_column($sections, Ipam\Api_Section::FIELD_NAME, Ipam\Api_Section::FIELD_ID);
 
 					if(($sectionId = array_search($search, $sections, true)) !== false) {
-						$results = new Ipam\Api_Section($sectionId);
+						$results = Ipam\Api_Section::factory($sectionId);
 					}
 					elseif(count($sections) > 0) {
 						$results = array_merge($results, array_values($sections));
@@ -1429,7 +1717,7 @@
 					$folders = array_column($folders, Ipam\Api_Folder::FIELD_NAME, Ipam\Api_Folder::FIELD_ID);
 
 					if(($folderId = array_search($search, $folders, true)) !== false) {
-						$results = new Ipam\Api_Folder($folderId);
+						$results = Ipam\Api_Folder::factory($folderId);
 					}
 					elseif(count($folders) > 0) {
 						$results = array_merge($results, array_values($folders));
@@ -1507,7 +1795,7 @@
 
 						if(($subnetId = array_search($userSearch, $subnetNames, true)) !== false) {
 							// $status = true;		// Un subnet peut toujours contenir un autre subnet
-							$results = new Ipam\Api_Subnet($subnetId);
+							$results = Ipam\Api_Subnet::factory($subnetId);
 						}
 						elseif(count($subnetNames) > 0) {
 							$results = array_merge($results, array_values($subnetNames));

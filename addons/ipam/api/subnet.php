@@ -18,22 +18,6 @@
 		);
 
 		/**
-		  * Enable or disable cache feature
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_cache = array();		// IPAM server ID keys, boolean value
-
-		/**
-		  * All subnets (cache)
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_objects = array();	// IPAM server ID keys, array value
-
-		/**
 		  * @var Addon\Ipam\Api_Vlan
 		  */
 		protected $_vlanApi = null;
@@ -77,10 +61,13 @@
 		{
 			if($this->_objectExists === null || $this->objectExists())
 			{
-				if($this->_objectDatas === null) {
-					$objectDatas = $this->_IPAM->getSubnet($this->getSubnetId());
-					$objectDatas = $this->_formatName($objectDatas);
-					$this->_objectDatas = $objectDatas;
+				if($this->_objectDatas === null)
+				{
+					$this->_objectDatas = $this->_adapter->getSubnet($this->getSubnetId());
+
+					if($this->_objectDatas !== false) {
+						$this->_objectDatas = $this->_formatName($this->_objectDatas);
+					}
 				}
 
 				return $this->_objectDatas;
@@ -212,7 +199,7 @@
 		public function getUsage()
 		{
 			if($this->subnetExists()) {
-				return $this->_IPAM->getSubnetUsage($this->getSubnetId());
+				return $this->_adapter->getSubnetUsage($this->getSubnetId());
 			}
 			else {
 				return false;
@@ -240,7 +227,7 @@
 		public function getSubSubnets($subnetName = null)
 		{
 			if($this->subnetExists()) {
-				return self::searchSubnets($subnetName, null, $this->getSectionId(), null, null, true, $this->_IPAM);
+				return self::searchSubnets($subnetName, null, $this->getSectionId(), null, null, true, $this->_adapter);
 			}
 			else {
 				return false;
@@ -253,7 +240,7 @@
 			$vlanId = $this->getVlanId();
 
 			if($vlanId !== false) {
-				return $this->_IPAM->getVlan($vlanId);
+				return $this->_adapter->getVlan($vlanId);
 			}
 			else {
 				return false;
@@ -289,7 +276,7 @@
 		public function getAddress($address)
 		{
 			if(Tools::isIP($address)) {
-				$address = $this->_IPAM->getAddress($this->getSubnetId(), $address);
+				$address = $this->_adapter->getAddress($this->getSubnetId(), $address);
 				return ($address !== false) ? ($address) : (false);
 			}
 			else {
@@ -325,7 +312,7 @@
 		public function getAddresses($addressName = null)
 		{
 			if($this->subnetExists()) {
-				$addresses = $this->_IPAM->getAddresses($this->getSubnetId());
+				$addresses = $this->_adapter->getAddresses($this->getSubnetId());
 				return $this->_filterObjects($addresses, self::FIELD_NAME, $addressName);
 			}
 			else {
@@ -416,7 +403,7 @@
 		public function findSubnets($subnet, $IPv = null, $strict = false)
 		{
 			if($this->hasSubnetId()) {
-				return self::_searchSubnets($this->_IPAM, $subnet, $IPv, $this->getSubnetId(), null, null, $strict);
+				return self::_searchSubnets($this->_adapter, $subnet, $IPv, $this->getSubnetId(), null, null, $strict);
 			}
 			else {
 				return false;
@@ -455,7 +442,7 @@
 		protected static function _searchSubnets(Main $IPAM = null, $subnet = '*', $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
 			if(Tools::isSubnet($subnet)) {
@@ -468,7 +455,7 @@
 
 		public function findCidrSubnets($subnet, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
-			return self::_searchCidrSubnets($this->_IPAM, $subnet, $subnetId, $folderId, $sectionId, $strict);
+			return self::_searchCidrSubnets($this->_adapter, $subnet, $subnetId, $folderId, $sectionId, $strict);
 		}
 
 		public static function searchCidrSubnets($subnet, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
@@ -480,7 +467,7 @@
 		protected static function _searchCidrSubnets(Main $IPAM = null, $subnet = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
 			if($subnet !== null)
@@ -493,10 +480,8 @@
 						return false;
 					}
 
-					if(self::cacheEnabled($IPAM))
+					if(($subnets = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false)
 					{
-						$subnets = self::_getObjects($IPAM);
-
 						if(C\Tools::is('int&&>=0', $subnetId)) {
 							$subnets = self::_filterObjects($subnets, 'masterSubnetId', (string) $subnetId);
 						}
@@ -539,7 +524,7 @@
 
 		public function findSubnetNames($name, $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
-			return self::_searchSubnetNames($this->_IPAM, $name, $IPv, $subnetId, $folderId, $sectionId, $strict);
+			return self::_searchSubnetNames($this->_adapter, $name, $IPv, $subnetId, $folderId, $sectionId, $strict);
 		}
 
 		public static function searchSubnetNames($name, $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
@@ -550,14 +535,14 @@
 		protected static function _searchSubnetNames(Main $IPAM = null, $name = '*', $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
-
-			$subnets = array();
 
 			if($name === null) {
 				$name = '*';
 			}
+
+			$subnets = array();
 
 			if($sectionId === null && $folderId === null && $subnetId === null)
 			{
@@ -579,10 +564,8 @@
 				}
 			}
 
-			if(self::cacheEnabled($IPAM))
+			if(($subnets = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false)
 			{
-				$subnets = self::_getObjects($IPAM);
-
 				if(C\Tools::is('int&&>=0', $subnetId)) {
 					$subnets = self::_filterObjects($subnets, 'masterSubnetId', (string) $subnetId);
 				}
@@ -627,27 +610,5 @@
 			}
 
 			return $subnets;
-		}
-
-		/**
-		  * @param Addon\Ipam\Main $IPAM
-		  * @return bool
-		  */
-		protected static function _setObjects(C\Addon\Adapter $IPAM = null)
-		{
-			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
-			}
-
-			$id = $IPAM->getServerId();
-			$result = $IPAM->getAllSubnets();
-
-			if($result !== false) {
-				self::$_objects[$id] = $result;
-				return true;
-			}
-			else {
-				return false;
-			}
 		}
 	}

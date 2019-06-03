@@ -12,47 +12,10 @@
 		const SEPARATOR_PATH = ',';
 		const SEPARATOR_SECTION = '#';
 
-		/**
-		  * @var string
-		  */
-		protected static $_parentAdapter = __NAMESPACE__ .'\Main';
-
-		/**
-		  * @var Addon\Ipam\Main
-		  */
-		protected static $_IPAM = null;			// Global IPAM (enabled)
-
-		/**
-		  * @var Addon\Ipam\Main[]
-		  */
-		protected static $_aIPAM = array();		// a = all/array/available IPAM
-
-		/**
-		  * @var Addon\Ipam\Main
-		  */
-		protected $_IPAM_ = null;				// Local IPAM (for this instance)
-
-
-		public function __construct($objectId = null)
-		{
-			parent::__construct($objectId);
-			$this->_IPAM_ = &$this->_ownerAdapter;	// /!\ A executer avant _setObjectId
-			$this->_setObjectId($objectId);			// @todo temp
-		}
 
 		public static function objectIdIsValid($objectId)
 		{
 			return C\Tools::is('int&&>0', $objectId);
-		}
-
-		public function hasObjectId()
-		{
-			return ($this->_objectId !== null);
-		}
-
-		public function getObjectId()
-		{
-			return $this->_objectId;
 		}
 
 		public function objectExists()
@@ -111,87 +74,19 @@
 			{
 				case 'ipam':
 				case '_IPAM': {
-					return $this->_IPAM_;
-				}
-				case 'id': {
-					return $this->getObjectId();
-				}
-				case 'name':
-				case 'label': {
-					return $this->getObjectLabel();
+					return $this->_adapter;
 				}
 				default: {
-					throw new Exception("This attribute '".$name."' does not exist", E_USER_ERROR);
+					return parent::__get($name);
 				}
 			}
 		}
 
-		public function __call($method, $parameters = null)
-		{
-			if(substr($method, 0, 3) === 'get')
-			{
-				$name = substr($method, 3);
-				$name = mb_strtolower($name);
-
-				switch($name)
-				{
-					case 'name': {
-						return $this->_getField(static::FIELD_NAME, 'string&&!empty');
-					}
-				}
-			}
-
-			throw new Exception("Method '".$method."' does not exist", E_USER_ERROR);
-		}
-
 		/**
-		  * @param Addon\Ipam\Main|Addon\Ipam\Main[] $IPAM
-		  * @return bool
+		  * @return Addon\Ipam\Orchestrator
 		  */
-		public static function setIpam($IPAM)
+		protected static function _getOrchestrator()
 		{
-			return self::setAdapter($IPAM);
-		}
-
-		/**
-		  * @param Addon\Ipam\Main|Addon\Ipam\Main[] $adapter
-		  * @throw Core\Exception
-		  * @return bool
-		  */
-		public static function setAdapter($adapter)
-		{
-			$status = parent::setAdapter($adapter);
-
-			if($status) {
-				self::$_IPAM = &self::$_adapter;
-				self::$_aIPAM = &self::$_allAdapters;
-			}
-
-			return $status;
-		}
-
-		/**
-		  * @return null|Addon\Ipam\Main|Addon\Ipam\Main[]
-		  */
-		public static function getIpam()
-		{
-			return self::getAdapter();
-		}
-
-		/**
-		  * @param string $key
-		  * @return bool
-		  */
-		public static function enableIpam($key)
-		{
-			return self::enableAdapter($key);
-		}
-
-		/**
-		  * @return null|Addon\Ipam\Main
-		  */
-		public static function getIpamEnabled()
-		{
-			return self::getAdapterEnabled();
+			return Orchestrator::getInstance();
 		}
 	}

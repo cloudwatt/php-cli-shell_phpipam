@@ -1,6 +1,6 @@
 <?php
 	namespace Addon\Ipam;
 
-	abstract class Connector_Abstract extends Main implements Connector_Interface
+	abstract class Connector_Abstract extends Adapter implements Connector_Interface
 	{
 	}

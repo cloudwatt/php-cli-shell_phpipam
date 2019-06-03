@@ -16,28 +16,6 @@
 		const FIELD_ID = 'id';
 		const FIELD_NAME = 'description';
 
-		/**
-		  * Enable or disable cache feature
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_cache = array();		// IPAM server ID keys, boolean value
-
-		/**
-		  * All folders (cache)
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_objects = array();	// IPAM server ID keys, array value
-
-		/**
-		  * All folders (cache)
-		  * @var array
-		  */
-		protected static $_folders = array();
-
 
 		public function folderIdIsValid($folderId)
 		{
@@ -70,20 +48,15 @@
 			{
 				if($this->_objectDatas === null)
 				{
+					$this->_objectDatas = false;
+		
 					/**
 					  * @todo a décommenter après correction bug PHPIPAM
 					  * curl -vvv -H "token: [token]" -H "Content-Type: application/json; charset=utf-8" https://ipam.corp.cloudwatt.com/api/myAPP/folders/1185/
 					  * Fatal error</b>:  Unsupported operand types in <b>/opt/phpipam/functions/classes/class.Tools.php</b> on line <b>1695</b>
-					$this->_objectDatas = $this->_IPAM->getFolder($this->getFolderId());*/
+					$this->_objectDatas = $this->_adapter->getFolder($this->getFolderId());*/
 
-					$this->_objectDatas = false;
-
-					if(self::cacheEnabled($this->_IPAM)) {
-						$folders = self::_getObjects($this->_IPAM);
-					}
-					else {
-						$folders = self::_getFolders($this->_IPAM);
-					}
+					$folders = $this->_adapter->getAllFolders();
 
 					foreach($folders as $folder)
 					{
@@ -121,7 +94,7 @@
 		public function getSubFolders($folderName = null)
 		{
 			if($this->folderExists()) {
-				return self::searchFolders($folderName, $this->getFolderId(), null, true, $this->_IPAM);
+				return self::searchFolders($folderName, $this->getFolderId(), null, true, $this->_adapter);
 			}
 			else {
 				return false;
@@ -149,7 +122,7 @@
 		public function getSubnets($subnetName = null)
 		{
 			if($this->folderExists()) {
-				return Api_Subnet::searchSubnets($subnetName, null, null, $this->getFolderId(), null, true, $this->_IPAM);
+				return Api_Subnet::searchSubnets($subnetName, null, null, $this->getFolderId(), null, true, $this->_adapter);
 			}
 			else {
 				return false;
@@ -198,7 +171,7 @@
 		public function findFolders($folderName, $strict = false)
 		{
 			if($this->hasFolderId()) {
-				return self::_searchFolders($this->_IPAM, $folderName, $this->getFolderId(), null, $strict);
+				return self::_searchFolders($this->_adapter, $folderName, $this->getFolderId(), null, $strict);
 			}
 			else {
 				return false;
@@ -212,10 +185,10 @@
 		  * @param int $folderId Folder ID
 		  * @param int $sectionId Section ID
 		  * @param bool $strict
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @return false|array
 		  */
-		public static function searchFolders($folderName, $folderId = null, $sectionId = null, $strict = false, Main $IPAM = null)
+		public static function searchFolders($folderName, $folderId = null, $sectionId = null, $strict = false, Adapter $IPAM = null)
 		{
 			return self::_searchFolders($IPAM, $folderName, $folderId, $sectionId, $strict);
 		}
@@ -223,23 +196,21 @@
 		/**
 		  * Return all folders matches request
 		  *
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @param string $folderName Folder label, wildcard * is allowed
 		  * @param int $folderId Folder ID
 		  * @param int $sectionId Section ID
 		  * @param bool $strict
 		  * @return false|array
 		  */
-		protected static function _searchFolders(Main $IPAM = null, $folderName = '*', $folderId = null, $sectionId = null, $strict = false)
+		protected static function _searchFolders(Adapter $IPAM = null, $folderName = '*', $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
-			if(self::cacheEnabled($IPAM))
+			if(($folders = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false)
 			{
-				$folders = self::_getObjects($IPAM);
-
 				if(C\Tools::is('int&&>=0', $folderId)) {
 					$folders = self::_filterObjects($folders, 'masterSubnetId', (string) $folderId);
 				}
@@ -252,43 +223,6 @@
 			}
 			else {
 				return $IPAM->searchFolderName($folderName, $folderId, $sectionId, $strict);
-			}
-		}
-
-		protected static function _getFolders(Main $IPAM = null)
-		{
-			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
-			}
-
-			$id = $IPAM->getServerId();
-
-			if(!array_key_exists($id, self::$_folders)) {
-				self::$_folders[$id] = $IPAM->getAllFolders();
-			}
-
-			return self::$_folders[$id];
-		}
-
-		/**
-		  * @param Addon\Ipam\Main $IPAM
-		  * @return bool
-		  */
-		protected static function _setObjects(C\Addon\Adapter $IPAM = null)
-		{
-			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
-			}
-
-			$id = $IPAM->getServerId();
-			$result = $IPAM->getAllFolders();
-
-			if($result !== false) {
-				self::$_objects[$id] = $result;
-				return true;
-			}
-			else {
-				return false;
 			}
 		}
 	}

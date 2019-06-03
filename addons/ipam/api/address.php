@@ -27,22 +27,6 @@
 		const DHCP = 'DHCP';
 
 		/**
-		  * Enable or disable cache feature
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_cache = array();		// IPAM server ID keys, boolean value
-
-		/**
-		  * All sections (cache)
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_objects = array();	// IPAM server ID keys, array value
-
-		/**
 		  * @var int
 		  */
 		protected $_subnetId;
@@ -98,7 +82,7 @@
 			if($this->_objectExists === null || $this->objectExists())
 			{
 				if($this->_objectDatas === null) {
-					$this->_objectDatas = $this->_IPAM->getAddress($this->getAddressId());
+					$this->_objectDatas = $this->_adapter->getAddress($this->getAddressId());
 				}
 
 				return $this->_objectDatas;
@@ -174,7 +158,7 @@
 			$subnetId = $this->getSubnetId();
 
 			if($subnetId !== false) {
-				return $this->_IPAM->getSubnet($subnetId);
+				return $this->_adapter->getSubnet($subnetId);
 			}
 			else {
 				return false;
@@ -254,7 +238,7 @@
 			}
 		}
 
-		public function create($description = '', $note = '', $port = '', $tag = self::ONLINE)
+		public function create($description = '', $note = '', $port = '', $tag = self::ONLINE, $autoRegisterToStore = true)
 		{
 			$this->_errorMessage = null;
 
@@ -271,7 +255,7 @@
 							}
 
 							try {
-								$status = $this->_IPAM->createAddress($this->getSubnetId(), $this->getAddress(), $this->getHostname(), $description, $note, $port, $tag);
+								$status = $this->_adapter->createAddress($this->getSubnetId(), $this->getAddress(), $this->getHostname(), $description, $note, $port, $tag);
 							}
 							catch(E\Message $e) {
 								$this->_errorMessage = $e->getMessage();
@@ -282,10 +266,15 @@
 							{
 								$addresses = $this->findIpAddresses($this->getAddress(), $this->getSubnetId(), true);
 
-								if($addresses !== false && count($addresses) === 1) {
+								if($addresses !== false && count($addresses) === 1)
+								{
 									$addressId = $addresses[0][self::FIELD_ID];
 									$this->_hardReset(false);
 									$this->_setObjectId($addressId);
+
+									if($autoRegisterToStore) {
+										$this->_registerToStore();
+									}
 								}
 								else {
 									$status = false;
@@ -362,7 +351,7 @@
 			if($this->addressExists())
 			{
 				try {
-					$status = $this->_IPAM->modifyAddress($this->getAddressId(), $label, $description);
+					$status = $this->_adapter->modifyAddress($this->getAddressId(), $label, $description);
 				}
 				catch(E\Message $e) {
 					$this->_errorMessage = $e->getMessage();
@@ -385,13 +374,14 @@
 			if($this->addressExists())
 			{
 				try {
-					$status = $this->_IPAM->removeAddress($this->getAddressId());
+					$status = $this->_adapter->removeAddress($this->getAddressId());
 				}
 				catch(E\Message $e) {
 					$this->_errorMessage = $e->getMessage();
 					$status = false;
 				}
 
+				$this->_unregisterFromStore();
 				$this->_hardReset();
 				return $status;
 			}
@@ -514,7 +504,7 @@
 		public function findAddresses($address, $IPv = null, $strict = false)
 		{
 			if($this->hasAddressId()) {
-				return self::_searchAddresses($this->_IPAM, $address, $IPv, $this->getSubnetId(), $strict);
+				return self::_searchAddresses($this->_adapter, $address, $IPv, $this->getSubnetId(), $strict);
 			}
 			else {
 				return false;
@@ -538,14 +528,14 @@
 		/**
 		  * Return all addresses matches request
 		  *
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @param string $address Address IP or name, wildcard * is allowed
 		  * @param int $IPv IP version, 4 or 6
 		  * @param int $subnetId Subnet ID
 		  * @param bool $strict
 		  * @return false|array
 		  */
-		protected static function _searchAddresses(Main $IPAM = null, $address = '*', $IPv = null, $subnetId = null, $strict = false)
+		protected static function _searchAddresses(Adapter $IPAM = null, $address = '*', $IPv = null, $subnetId = null, $strict = false)
 		{
 			if(Tools::isIP($address)) {
 				return self::_searchIpAddresses($IPAM, $address, $subnetId, $strict);
@@ -564,7 +554,7 @@
 
 		public function findIpAddresses($ip, $subnetId = null, $strict = false)
 		{
-			return self::_searchIpAddresses($this->_IPAM, $ip, $subnetId, $strict);
+			return self::_searchIpAddresses($this->_adapter, $ip, $subnetId, $strict);
 		}
 
 		public static function searchIpAddresses($ip, $subnetId = null, $strict = false)
@@ -573,10 +563,10 @@
 		}
 
 		// $strict for future use
-		protected static function _searchIpAddresses(Main $IPAM = null, $ip = '*', $subnetId = null, $strict = false)
+		protected static function _searchIpAddresses(Adapter $IPAM = null, $ip = '*', $subnetId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
 			return $IPAM->searchAddressIP($ip, $subnetId, $strict);
@@ -584,7 +574,7 @@
 
 		public function findAddressNames($name, $IPv = null, $subnetId = null, $strict = false)
 		{
-			return self::_searchAddressNames($this->_IPAM, $name, $IPv, $subnetId, $strict);
+			return self::_searchAddressNames($this->_adapter, $name, $IPv, $subnetId, $strict);
 		}
 
 		public static function searchAddressNames($name, $IPv = null, $subnetId = null, $strict = false)
@@ -592,10 +582,10 @@
 			return self::_searchAddressNames(null, $name, $IPv, $subnetId, $strict);
 		}
 
-		protected static function _searchAddressNames(Main $IPAM = null, $name = '*', $IPv = null, $subnetId = null, $strict = false)
+		protected static function _searchAddressNames(Adapter $IPAM = null, $name = '*', $IPv = null, $subnetId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
 			if($name === null) {
@@ -610,7 +600,7 @@
 				$separator = preg_quote(self::SEPARATOR_SECTION, '#');
 				$status = preg_match('#(?:'.$separator.'(?<section>.+?)'.$separator.')?(?<name>.+)#i', $name, $nameParts);
 
-				if($status && C\Tools::is('string&&!empty', $nameParts['section']) && C\Tools::is('string&&!empty', $descParts['name'])) {
+				if($status && C\Tools::is('string&&!empty', $nameParts['section']) && C\Tools::is('string&&!empty', $nameParts['name'])) {
 					$sectionNameFilter = $nameParts['section'];
 					$name = $nameParts['name'];
 				}
@@ -624,7 +614,7 @@
 
 		public function findAddressDescs($desc, $IPv = null, $subnetId = null, $strict = false)
 		{
-			return self::_searchAddressDescs($this->_IPAM, $desc, $IPv, $subnetId, $strict);
+			return self::_searchAddressDescs($this->_adapter, $desc, $IPv, $subnetId, $strict);
 		}
 
 		public static function searchAddressDescs($desc, $IPv = null, $subnetId = null, $strict = false)
@@ -632,10 +622,10 @@
 			return self::_searchAddressDescs(null, $desc, $IPv, $subnetId, $strict);
 		}
 
-		protected static function _searchAddressDescs(Main $IPAM = null, $desc = '*', $IPv = null, $subnetId = null, $strict = false)
+		protected static function _searchAddressDescs(Adapter $IPAM = null, $desc = '*', $IPv = null, $subnetId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
 			if($desc === null) {
@@ -666,7 +656,7 @@
 		{
 			if(C\Tools::is('string&&!empty', $sectionNameFilter))
 			{
-				$sections = Api_Section::searchSections($nameParts['section'], null, true);
+				$sections = Api_Section::searchSections($sectionNameFilter, null, true);
 
 				if($sections !== false && count($sections) === 1)
 				{

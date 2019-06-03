@@ -14,22 +14,6 @@
 		const FIELD_DESC = 'description';
 
 		/**
-		  * Enable or disable cache feature
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_cache = array();		// IPAM server ID keys, boolean value
-
-		/**
-		  * All sections (cache)
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_objects = array();	// IPAM server ID keys, array value
-
-		/**
 		  * Path to self object
 		  * @var array
 		  */
@@ -76,7 +60,7 @@
 			if($this->_objectExists === null || $this->objectExists())
 			{
 				if($this->_objectDatas === null) {
-					$this->_objectDatas = $this->_IPAM->getSection($this->getSectionId());
+					$this->_objectDatas = $this->_adapter->getSection($this->getSectionId());
 				}
 
 				return $this->_objectDatas;
@@ -167,13 +151,12 @@
 		{
 			if($this->sectionExists())
 			{
-				if(self::cacheEnabled($this->_IPAM)) {
-					$sections = self::_getObjects($this->_IPAM);
+				if(($sections = $this->_getThisCache(self::OBJECT_TYPE)) !== false) {
 					$sections = self::_filterObjects($sections, 'masterSection', (string) $this->getSectionId());
 					return self::_filterObjects($sections, self::FIELD_NAME, $sectionName);
 				}
 				else {
-					$sections = $this->_IPAM->getSections($this->getSectionId());
+					$sections = $this->_adapter->getSections($this->getSectionId());
 					return $this->_filterObjects($sections, self::FIELD_NAME, $sectionName);
 				}
 			}
@@ -210,7 +193,7 @@
 		public function getFolders($folderName = null)
 		{
 			if($this->sectionExists()) {
-				return Api_Folder::searchFolders($folderName, null, $this->getSectionId(), true, $this->_IPAM);
+				return Api_Folder::searchFolders($folderName, null, $this->getSectionId(), true, $this->_adapter);
 			}
 			else {
 				return false;
@@ -228,7 +211,7 @@
 		public function findFolders($folderName, $strict = false)
 		{
 			if($this->sectionExists()) {
-				return Api_Folder::searchFolders($folderName, null, $this->getSectionId(), $strict, $this->_IPAM);
+				return Api_Folder::searchFolders($folderName, null, $this->getSectionId(), $strict, $this->_adapter);
 			}
 			else {
 				return false;
@@ -263,7 +246,7 @@
 		public function getSubnets($subnetName = null)
 		{
 			if($this->sectionExists()) {
-				return Api_Subnet::searchSubnets($subnetName, null, null, null, $this->getSectionId(), true, $this->_IPAM);
+				return Api_Subnet::searchSubnets($subnetName, null, null, null, $this->getSectionId(), true, $this->_adapter);
 			}
 			else {
 				return false;
@@ -281,7 +264,7 @@
 		public function findSubnets($subnet, $IPv = null, $strict = false)
 		{
 			if($this->sectionExists()) {
-				return Api_Subnet::searchSubnets($subnet, $IPv, null, 0, $this->getSectionId(), $strict, $this->_IPAM);
+				return Api_Subnet::searchSubnets($subnet, $IPv, null, 0, $this->getSectionId(), $strict, $this->_adapter);
 			}
 			else {
 				return false;
@@ -357,7 +340,7 @@
 		  */
 		public function findRootSections($sectionName, $strict = false)
 		{
-			return self::searchRootSections($sectionName, $strict, $this->_IPAM);
+			return self::searchRootSections($sectionName, $strict, $this->_adapter);
 		}
 
 		/**
@@ -365,17 +348,16 @@
 		  *
 		  * @param string $sectionName Section label, wildcard * is allowed
 		  * @param bool $strict
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @return false|array
 		  */
-		public static function searchRootSections($sectionName, $strict = false, Main $IPAM = null)
+		public static function searchRootSections($sectionName, $strict = false, Adapter $IPAM = null)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
-			if(self::cacheEnabled($IPAM)) {
-				$sections = self::_getObjects($IPAM);
+			if(($sections = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false) {
 				$sections = self::_filterObjects($sections, 'masterSection', (string) $IPAM::SECTION_ROOT_ID);
 				return self::_searchObjects($sections, self::FIELD_NAME, $sectionName, $strict);
 			}
@@ -408,7 +390,7 @@
 		public function findSections($sectionName, $strict = false)
 		{
 			if($this->hasSectionId()) {
-				return self::_searchSections($this->_IPAM, $sectionName, $this->getSectionId(), $strict);
+				return self::_searchSections($this->_adapter, $sectionName, $this->getSectionId(), $strict);
 			}
 			else {
 				return $this->findRootSections($sectionName, $strict);
@@ -433,20 +415,20 @@
 		/**
 		  * Return all sections matches request
 		  *
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @param string $sectionName Section label, wildcard * is allowed
 		  * @param int $sectionId Section ID
 		  * @param bool $strict
 		  * @return false|array
 		  */
-		protected static function _searchSections(Main $IPAM = null, $sectionName = '*', $sectionId = null, $strict = false)
+		protected static function _searchSections(Adapter $IPAM = null, $sectionName = '*', $sectionId = null, $strict = false)
 		{
 			return self::_searchSectionNames($IPAM, $sectionName, $sectionId, $strict);
 		}
 
 		public function findSectionNames($sectionName, $sectionId = null, $strict = false)
 		{
-			return self::_searchSectionNames($this->_IPAM, $sectionName, $sectionId, $strict);
+			return self::_searchSectionNames($this->_adapter, $sectionName, $sectionId, $strict);
 		}
 
 		public static function searchSectionNames($sectionName, $sectionId = null, $strict = false)
@@ -454,16 +436,14 @@
 			return self::_searchSectionNames(null, $sectionName, $sectionId, $strict);
 		}
 
-		protected static function _searchSectionNames(Main $IPAM = null, $sectionName = '*', $sectionId = null, $strict = false)
+		protected static function _searchSectionNames(Adapter $IPAM = null, $sectionName = '*', $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
-			if(self::cacheEnabled($IPAM))
+			if(($sections = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false)
 			{
-				$sections = self::_getObjects($IPAM);
-
 				if(C\Tools::is('int&&>=0', $sectionId)) {
 					$sections = self::_filterObjects($sections, 'masterSection', (string) $sectionId);
 				}
@@ -472,28 +452,6 @@
 			}
 			else {
 				return $IPAM->searchSectionName($sectionName, $sectionId, $strict);
-			}
-		}
-
-		/**
-		  * @param Addon\Ipam\Main $IPAM
-		  * @return bool
-		  */
-		protected static function _setObjects(C\Addon\Adapter $IPAM = null)
-		{
-			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
-			}
-
-			$id = $IPAM->getServerId();
-			$result = $IPAM->getAllSections();
-
-			if($result !== false) {
-				self::$_objects[$id] = $result;
-				return true;
-			}
-			else {
-				return false;
 			}
 		}
 	}

@@ -12,19 +12,23 @@
 	{
 		const SHELL_HISTORY_FILENAME = '.ipam.history';
 
-		/**
-		  * @var Addon\Ipam\Connector\Abstract
-		  */
-		protected $_IPAM;
+		const REGEX_SECTION_NAME = "#^\"?([a-z0-9\-_. ]+)\"?$#i";
+		const REGEX_SECTION_NAME_WC = "#^\"?([a-z0-9\-_. *]+)\"?$#i";
+		const REGEX_SUBNET_ALL = "#^\"?([a-z0-9\-_.: /\#]+)\"?$#i";
+		const REGEX_SUBNET_ALL_WC = "#^\"?([a-z0-9\-_.: /\#*]+)\"?$#i";
+		const REGEX_VLAN_ALL = "#^\"?([a-z0-9\-_. ]+)\"?$#i";
+		const REGEX_VLAN_ALL_WC = "#^\"?([a-z0-9\-_. *]+)\"?$#i";
+		const REGEX_ADDRESS_ALL = "#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.: ]+)\"?$#i";
+		const REGEX_ADDRESS_ALL_WC = "#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.: *]+)\"?$#i";
 
 		protected $_commands = array(
 			'help', 'history',
 			'ls', 'll', 'cd', 'pwd', 'search', 'find', 'exit', 'quit',
 			'list' => array(
-				'section', 'subnet', 'vlan', 'address',
+				'sections', 'subnets', 'vlans', 'addresses',
 			),
 			'show' => array(
-				'section', 'subnet', 'vlan', 'address',
+				'sections', 'subnets', 'vlans', 'addresses',
 			),
 			'create' => array(
 				'address'
@@ -49,40 +53,37 @@
 		  * find ou/lancer/ma/recherche
 		  */
 		protected $_inlineArgCmds = array(
-			'ls' => "#^\"?([a-z0-9\-_.: /\\\\\#~]+)\"?$#i",											// / pour path, # pour #IPv4 ou #Ipv6
-			'll' => "#^\"?([a-z0-9\-_.: /\\\\\#~]+)\"?$#i",											// / pour path, # pour #IPv4 ou #Ipv6
-			'cd' => "#^\"?([a-z0-9\-_. /\\\\\#~]+)\"?$#i",											// / pour path, # pour #IPv4 ou #Ipv6
+			'ls' => "#^\"?([a-z0-9\-_.: /\\\\\#~]+)\"?$#i",																		// / pour path, # pour #IPv4 ou #Ipv6
+			'll' => "#^\"?([a-z0-9\-_.: /\\\\\#~]+)\"?$#i",																		// / pour path, # pour #IPv4 ou #Ipv6
+			'cd' => "#^\"?([a-z0-9\-_. /\\\\\#~]+)\"?$#i",																		// / pour path, # pour #IPv4 ou #Ipv6
 			'search' => array(
-				0 => array('all', 'subnet', 'vlan', 'address'),
+				0 => array('all', 'subnets', 'vlans', 'addresses'),
 				1 => "#^\"?([a-z0-9\-_.:* /\#]+)\"?$#i"
 			),
 			'find' => array(
 				0 => "#^\"?([a-z0-9\-_. /~]+)\"?$#i",
-				1 => array('all', 'subnet', 'vlan', 'address'),
-				2 => "#^\"?([a-z0-9\-_.:* /\#]+)\"?$#i"												// * pour % SQL LIKE
+				1 => array('all', 'subnets', 'vlans', 'addresses'),
+				2 => "#^\"?([a-z0-9\-_.:* /\#]+)\"?$#i"																			// * pour % SQL LIKE
 			),
-			'list section' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
-			'show section' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
-			//'list folder' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
-			//'show folder' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
-			'list subnet' => "#^\"?([a-z0-9\-_.: /\#]+)\"?$#i",										// : pour IPv6, / pour CIDR, # pour #IPv4 ou #Ipv6
-			'show subnet' => "#^\"?([a-z0-9\-_.: /\#]+)\"?$#i",										// : pour IPv6, / pour CIDR, # pour #IPv4 ou #Ipv6
-			'list vlan' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
-			'show vlan' => "#^\"?([a-z0-9\-_. ]+)\"?$#i",
-			//'show ip' => "#^\"?(([0-9]{1,3}\.){3}\.[0-9]{1,3)\"?$#i",
-			'list address' => "#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.:* ]+)\"?$#i",		// @todo regexp ipv6
-			'show address' => "#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.:* ]+)\"?$#i",		// @todo regexp ipv6
+			'list sections' => array(0 => self::REGEX_SECTION_NAME, 1 => array('|'), 2 => array('form', 'list')),
+			'list subnets' => array(0 => self::REGEX_SUBNET_ALL, 1 => array('|'), 2 => array('form', 'list')),					// : pour IPv6, / pour CIDR, # pour #IPv4 ou #Ipv6
+			'list vlans' => array(0 => self::REGEX_VLAN_ALL, 1 => array('|'), 2 => array('form', 'list')),
+			'list addresses' => array(0 => self::REGEX_ADDRESS_ALL_WC, 1 => array('|'), 2 => array('form', 'list')),			// @todo regexp ipv6
+			'show sections' => array(0 => self::REGEX_SECTION_NAME, 1 => array('|'), 2 => array('form', 'list')),
+			'show subnets' => array(0 => self::REGEX_SUBNET_ALL, 1 => array('|'), 2 => array('form', 'list')),					// : pour IPv6, / pour CIDR, # pour #IPv4 ou #Ipv6
+			'show vlans' => array(0 => self::REGEX_VLAN_ALL, 1 => array('|'), 2 => array('form', 'list')),
+			'show addresses' => array(0 => self::REGEX_ADDRESS_ALL_WC, 1 => array('|'), 2 => array('form', 'list')),			// @todo regexp ipv6
 			'create address' => array(
-				"#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9:]+)\"?$#i",							// IP v4 or v6 @todo regexp ipv6
-				"#^\"?([a-z0-9\-_.: ]+)\"?$#i",														// hostname
-				"#^\"?([a-z0-9\-_.: ]+)\"?$#i",														// description
+				"#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-f0-9:]+)\"?$#i",														// IP v4 or v6 @todo regexp ipv6
+				"#^\"?([[:print:]]+)\"?$#i",																					// hostname
+				"#^\"?([[:print:]]+)\"?$#i",																					// description
 			),
 			'modify address' => array(
-				"#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.:* ]+)\"?$#i",
+				"#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-f0-9:]+)|([[:print:]]+)\"?$#i",											// IP v4 or v6 @todo regexp ipv6 or hostname
 				array('name', 'hostname', 'description'),
-				"#^\"?(.+)\"?$#i"
+				"#^\"?([:print:]+)\"?$#i"
 			),
-			'remove address' => array("#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-z0-9\-_.:* ]+)\"?$#i"),
+			'remove address' => array("#^\"?(([0-9]{1,3}\.){3}[0-9]{1,3})|([a-f0-9:]+)|([[:print:]]+)\"?$#i"),					// IP v4 or v6 @todo regexp ipv6 or hostname
 		);
 
 		/**
@@ -103,30 +104,30 @@
 			'find' => "Recherche avancée d'éléments. Utilisation: find [localisation|.] [type] [recherche]",
 			'exit' => "Ferme le shell",
 			'quit' => "Alias de exit",
-			'list' => "Affiche un type d'éléments; Dépend de la localisation actuelle. Utilisation: list [section|subnet|vlan|address] [object]",
-			'list section' => "Affiche les informations d'une section; Dépend de la localisation",
-			//'list folder' => "Affiche les informations d'un dossier; Dépend de la localisation",
-			'list subnet' => "Affiche les informations d'un sous réseau; Dépend de la localisation",
-			'list vlan' => "Affiche les informations d'un VLAN; Dépend de la localisation",
-			'list address' => "Affiche les informations d'une adresse IP; Dépend de la localisation. Utilisation: list address [ip|hostname|description]",
-			'show' => "Affiche un type d'éléments; Ne dépend pas de la localisation actuelle. Utilisation: show [section|subnet|vlan|address] [object]",
-			'show section' => "Affiche les informations d'une section",
-			//'show folder' => "Affiche les informations d'un dossier",
-			'show subnet' => "Affiche les informations d'un sous réseau",
-			'show vlan' => "Affiche les informations d'un VLAN",
-			//'show ip ' => "Alias de show address",
-			'show address' => "Affiche les informations d'une adresse IP. Utilisation: show address [ip|hostname|description]",
+			'list' => "Affiche un type d'éléments; Dépend de la localisation actuelle. Utilisation: list [sections|subnets|vlans|addresses] [object] | [form|list]",
+			'list sections' => "Affiche les informations d'une ou plusieurs sections; Dépend de la localisation. Utilisation: show sections [name] | [form|list]",
+			'list subnets' => "Affiche les informations d'un ou plusieurs sous réseau; Dépend de la localisation. Utilisation: show subnets [name|subnet] | [form|list]",
+			'list vlans' => "Affiche les informations d'un ou plusieurs VLAN; Dépend de la localisation. Utilisation: show vlans [name|number] | [form|list]",
+			'list addresses' => "Affiche les informations d'une ou plusieurs adresses IP; Dépend de la localisation. Utilisation: list addresses [ip|hostname|description] | [form|list]",
+			'show' => "Affiche un type d'éléments; Ne dépend pas de la localisation actuelle. Utilisation: show [sections|subnets|vlans|addresses] [object] | [form|list]",
+			'show sections' => "Affiche les informations d'une ou plusieurs sections. Utilisation: show sections [name] | [form|list]",
+			'show subnets' => "Affiche les informations d'un ou plusieurs sous réseau. Utilisation: show subnets [name|subnet] | [form|list]",
+			'show vlans' => "Affiche les informations d'un ou plusieurs VLAN. Utilisation: show vlans [name|number] | [form|list]",
+			'show addresses' => "Affiche les informations d'une ou plusieurs adresses IP. Utilisation: show addresses [ip|hostname|description] | [form|list]",
+			'create' => "Créer un objet IPAM",
 			'create address' => "Créer une adresse IP. Utilisation: create address [ip] [hostname] [description]",
+			'modify' => "Modifier un objet IPAM",
 			'modify address' => "Modifie les informations d'une adresse IP. Utilisation: modify address [hostname|IP] [hostname|description] [value]",
+			'remove' => "Supprimer un objet IPAM",
 			'remove address' => "Supprime une adresse IP. Utilisation: remove address [hostname|IP]",
 			'refresh caches' => "Rafraîchi les caches des objets de l'IPAM",
 			'phpipam' => "Lance le site WEB de PHPIPAM",
 		);
 
 		/**
-		  * @var bool
+		  * @var Addon\Ipam\Service
 		  */
-		protected $_objectCaching = false;
+		protected $_addonService;
 
 
 		public function __construct($configFilename, $server, $autoInitialisation = true)
@@ -141,20 +142,7 @@
 				$printInfoMessages = false;
 			}
 
-			try {
-				// /!\ Compatible mono-serveur donc $server ne peut pas être un array
-				$IPAM = new Ipam\Connector(array($server), $printInfoMessages, null, $this->_addonDebug);
-			}
-			catch(\Exception $e) {
-				$this->error("Impossible de se connecter ou de s'authentifier au service IPAM:".PHP_EOL.$e->getMessage(), 'red');
-				exit;
-			}
-
-			$this->_IPAM = $IPAM->getIpam();
-			Ipam\Api_Abstract::setIpam($this->_IPAM);
-
-			$this->_objectCaching = (bool) $IPAM->getConfig()->objectCaching;
-			$this->_initAllApiCaches($this->_objectCaching);
+			$this->_initAddon($server, $printInfoMessages);
 
 			$this->_PROGRAM = new Shell_Program_Ipam($this, $this->_TERMINAL);
 
@@ -168,8 +156,42 @@
 			}
 		}
 
-		protected function _initAllApiCaches($state)
+		protected function _initAddon($server, $printInfoMessages)
 		{
+			$Ipam_Orchestrator = Ipam\Orchestrator::getInstance($this->_CONFIG->IPAM);
+			$this->_addonService = $Ipam_Orchestrator->debug($this->_addonDebug)->newService($server);
+
+			if($printInfoMessages) {
+				$adapterMethod = $this->_addonService->getMethod();
+				C\Tools::e(PHP_EOL."Connection ".$adapterMethod." à l'IPAM @ ".$server." veuillez patienter ... ", 'blue');
+			}
+
+			try {
+				$isReady = $this->_addonService->initialization();
+			}
+			catch(\Exception $e) {
+				if($printInfoMessages) { C\Tools::e("[KO]", 'red'); }
+				$this->error("Impossible de démarrer le service IPAM:".PHP_EOL.$e->getMessage(), 'red');
+				exit;
+			}
+
+			if(!$isReady) {
+				if($printInfoMessages) { C\Tools::e("[KO]", 'red'); }
+				$this->error("Le service IPAM n'a pas pu être correctement initialisé", 'red');
+				exit;
+			}
+
+			if($printInfoMessages) {
+				C\Tools::e("[OK]", 'green');
+			}
+
+			$this->_refreshAddonCaches();
+		}
+
+		protected function _refreshAddonCaches()
+		{
+			$state = (bool) $this->_addonService->config->objectCaching;
+
 			if($state)
 			{
 				$classes = array(
@@ -183,19 +205,26 @@
 				foreach($classes as $class)
 				{
 					$this->EOL();
-					$class::cache(true);
+					$cache = $status = $this->_addonService->cache;
 
-					$this->print("Initialisation du cache pour les objets ".$class::OBJECT_NAME." ...", 'blue');
-					$status = $class::refreshCache($this->_IPAM);
-					$this->_TERMINAL->deleteMessage(1, true);
+					/**
+					  * Do not forget to enable cache
+					  * Test if cache is enabled
+					  */
+					if($cache !== false && $cache->enable())
+					{
+						$this->print("Initialisation du cache pour les objets ".$class::OBJECT_NAME." ...", 'blue');
+						$status = $cache->refresh($class::OBJECT_TYPE);
+						$this->_TERMINAL->deleteMessage(1, true);
 
-					if($status === true) {
-						$this->print("Initialisation du cache pour les objets ".$class::OBJECT_NAME." [OK]", 'green');
-					}
-					else {
-						$this->error("Initialisation du cache pour les objets ".$class::OBJECT_NAME." [KO]", 'red');
-						$class::cache(false);
-						$this->print("Désactivation du cache pour les objets ".$class::OBJECT_NAME." [OK]", 'orange');
+						if($status === true) {
+							$this->print("Initialisation du cache pour les objets ".$class::OBJECT_NAME." [OK]", 'green');
+						}
+						else {
+							$this->error("Initialisation du cache pour les objets ".$class::OBJECT_NAME." [KO]", 'red');
+							$this->print("Désactivation du cache pour les objets ".$class::OBJECT_NAME." [OK]", 'orange');
+							$cache->erase($class::OBJECT_TYPE);
+						}
 					}
 				}
 			}
@@ -219,46 +248,36 @@
 					$status = $this->_PROGRAM->printSearchObjects($args);
 					break;
 				}
-				case 'list section': {
-					$status = $this->_PROGRAM->printSectionInfos($args, true);
+				case 'list sections': {
+					$status = $this->_PROGRAM->listSections($args);
 					break;
 				}
-				/*case 'list folder': {
-					$status = $this->_PROGRAM->printFolderInfos($args, true);
-					break;
-				}*/
-				case 'list subnet': {
-					$status = $this->_PROGRAM->printSubnetInfos($args, true);
+				case 'list subnets': {
+					$status = $this->_PROGRAM->listSubnets($args);
 					break;
 				}
-				case 'list vlan': {
-					$status = $this->_PROGRAM->printVlanInfos($args, true);
+				case 'list vlans': {
+					$status = $this->_PROGRAM->listVlans($args);
 					break;
 				}
-				//case 'list ip':
-				case 'list address': {
-					$status = $this->_PROGRAM->printAddressInfos($args, true);
+				case 'list addresses': {
+					$status = $this->_PROGRAM->listAddresses($args);
 					break;
 				}
-				case 'show section': {
-					$status = $this->_PROGRAM->printSectionInfos($args, false);
+				case 'show sections': {
+					$status = $this->_PROGRAM->showSections($args);
 					break;
 				}
-				/*case 'show folder': {
-					$status = $this->_PROGRAM->printFolderInfos($args, false);
-					break;
-				}*/
-				case 'show subnet': {
-					$status = $this->_PROGRAM->printSubnetInfos($args, false);
+				case 'show subnets': {
+					$status = $this->_PROGRAM->showSubnets($args);
 					break;
 				}
-				case 'show vlan': {
-					$status = $this->_PROGRAM->printVlanInfos($args, false);
+				case 'show vlans': {
+					$status = $this->_PROGRAM->showVlans($args);
 					break;
 				}
-				//case 'show ip':
-				case 'show address': {
-					$status = $this->_PROGRAM->printAddressInfos($args, false);
+				case 'show addresses': {
+					$status = $this->_PROGRAM->showAddresses($args);
 					break;
 				}
 				case 'create address': {
@@ -274,7 +293,7 @@
 					break;
 				}
 				case 'refresh caches': {
-					$this->_initAllApiCaches($this->_objectCaching);
+					$this->_refreshAddonCaches();
 					$status = true;
 					break;
 				}
@@ -325,17 +344,17 @@
 			  * permettant de rechercher à la fois un nom et un subnet
 			  */
 			$cases = array(
-				'Addon\Ipam\Api_Section' => array(
-					'Addon\Ipam\Api_Section' => 'findSections',
-					'Addon\Ipam\Api_Folder' => 'findFolders',
-					'Addon\Ipam\Api_Subnet' => 'findSubnets',
+				Ipam\Api_Section::OBJECT_TYPE => array(
+					Ipam\Api_Section::class => 'findSections',
+					Ipam\Api_Folder::class => 'findFolders',
+					Ipam\Api_Subnet::class => 'findSubnets',
 				),
-				'Addon\Ipam\Api_Folder' => array(
-					'Addon\Ipam\Api_Folder' => 'findFolders',
-					'Addon\Ipam\Api_Subnet' => 'findSubnets',
+				Ipam\Api_Folder::OBJECT_TYPE => array(
+					Ipam\Api_Folder::class => 'findFolders',
+					Ipam\Api_Subnet::class => 'findSubnets',
 				),
-				'Addon\Ipam\Api_Subnet' => array(
-					'Addon\Ipam\Api_Subnet' => 'findSubnets',
+				Ipam\Api_Subnet::OBJECT_TYPE => array(
+					Ipam\Api_Subnet::class => 'findSubnets',
 				),
 			);
 
@@ -366,11 +385,11 @@
 					default:
 					{
 						$objectApi = end($pathApi);
-						$objectApiClass = get_class($objectApi);
+						$objectType = $objectApi::OBJECT_TYPE;
 
-						if(array_key_exists($objectApiClass, $cases))
+						if(array_key_exists($objectType, $cases))
 						{
-							foreach($cases[$objectApiClass] as $objectClass => $objectMethod)
+							foreach($cases[$objectType] as $objectClass => $objectMethod)
 							{
 								switch($objectClass)
 								{
@@ -379,7 +398,7 @@
 									  * Un subnet sans nom sera modifié pour qu'il ait son subnet comme nom
 									  * / étant un DIRECTORY_SEPARATOR il est remplacé par _ d'où le preg_replace
 									  */
-									case 'Addon\Ipam\Api_Subnet':
+									case Ipam\Api_Subnet::class:
 									{
 										$part = $this->_PROGRAM->cleanSubnetNameOfIPv($part, $IPv);
 										$part = $this->_PROGRAM->formatSubnetPathToCidr($part);
@@ -426,7 +445,7 @@
 										}
 									}
 
-									$pathApi[] = $temp = new $objectClass($objectId);
+									$pathApi[] = $objectClass::factory($objectId);
 									$pathIds[] = $objectId;
 									break;
 								}

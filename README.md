@@ -27,15 +27,21 @@ __*https://launchpad.net/~ondrej/+archive/ubuntu/php*__
 * apt update
 
 You have to install a PHP version >= 7.1:
-* apt update
-* apt install php7.2-cli php7.2-soap php7.2-mbstring php7.2-readline php7.2-curl  
-__Do not forget to install php7.2-curl__
+* apt install php7.3-cli php7.3-soap php7.3-mbstring php7.3-readline php7.3-curl  
+__Do not forget to install php7.3-curl__
+
+For MacOS users which use PHP 7.3, there is an issue with PCRE.
+You have to add this configuration in your php.ini:
+```ini
+pcre.jit=0
+```
+*To locate your php.ini, use this command: php -i | grep "Configuration File"*
 
 #### REPOSITORY
 * git clone https://github.com/cloudwatt/php-cli-shell_base
-* git checkout tags/v2.0
+* git checkout tags/v2.1
 * git clone https://github.com/cloudwatt/php-cli-shell_phpipam
-* git checkout tags/v2.0
+* git checkout tags/v2.1
 * Merge these two repositories
 
 #### CONFIGURATION FILE

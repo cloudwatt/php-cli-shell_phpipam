@@ -14,22 +14,6 @@
 		const FIELD_DESC = 'description';
 
 		/**
-		  * Enable or disable cache feature
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_cache = array();		// IPAM server ID keys, boolean value
-
-		/**
-		  * All vlans (cache)
-		  * /!\ Cache must be per type
-		  *
-		  * @var array
-		  */
-		protected static $_objects = array();	// IPAM server ID keys, array value
-
-		/**
 		  * @var array
 		  */
 		protected $_subnets = null;
@@ -65,7 +49,7 @@
 			if($this->_objectExists === null || $this->objectExists())
 			{
 				if($this->_objectDatas === null) {
-					$this->_objectDatas = $this->_IPAM->getVlan($this->getVlanId());
+					$this->_objectDatas = $this->_adapter->getVlan($this->getVlanId());
 				}
 
 				return $this->_objectDatas;
@@ -80,7 +64,7 @@
 			if($this->_subnets === null || $this->objectExists())
 			{
 				if($this->_subnets === null) {
-					$this->_subnets = $this->_IPAM->getSubnetsFromVlan($this->getVlanId());
+					$this->_subnets = $this->_adapter->getSubnetsFromVlan($this->getVlanId());
 				}
 
 				return $this->_subnets;
@@ -166,7 +150,7 @@
 		public function findVlans($vlan, $strict = false)
 		{
 			if($this->hasSubnetId()) {
-				return self::_searchVlans($this->_IPAM, $vlan, $strict);
+				return self::_searchVlans($this->_adapter, $vlan, $strict);
 			}
 			else {
 				return false;
@@ -178,10 +162,10 @@
 		  *
 		  * @param string $vlan VLAN number or name, wildcard * is allowed
 		  * @param bool $strict
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @return false|array
 		  */
-		public static function searchVlans($vlan, $strict = false, Main $IPAM = null)
+		public static function searchVlans($vlan, $strict = false, Adapter $IPAM = null)
 		{
 			return self::_searchVlans($IPAM, $vlan, $strict);
 		}
@@ -189,15 +173,15 @@
 		/**
 		  * Return all sections matches request
 		  *
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @param string $vlan VLAN number or name, wildcard * is allowed
 		  * @param bool $strict
 		  * @return false|array
 		  */
-		protected static function _searchVlans(Main $IPAM = null, $vlan = '*', $strict = false)
+		protected static function _searchVlans(Adapter $IPAM = null, $vlan = '*', $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
 			if(C\Tools::is('int&&>0', $vlan)) {
@@ -210,7 +194,7 @@
 
 		public function findVlanNumbers($vlanNumber)
 		{
-			return self::_searchVlanNumbers($this->_IPAM, $vlanNumber);
+			return self::_searchVlanNumbers($this->_adapter, $vlanNumber);
 		}
 
 		public static function searchVlanNumbers($vlanNumber)
@@ -218,14 +202,13 @@
 			return self::_searchVlanNumbers(null, $vlanNumber);
 		}
 
-		protected static function _searchVlanNumbers(Main $IPAM = null, $vlanNumber = null)
+		protected static function _searchVlanNumbers(Adapter $IPAM = null, $vlanNumber = null)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
-			if(self::cacheEnabled($IPAM)) {
-				$vlans = self::_getObjects($IPAM);
+			if(($vlans = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false) {
 				return self::_filterObjects($vlans, 'number', (string) $vlanNumber);
 			}
 			else {
@@ -235,7 +218,7 @@
 
 		public function findVlanNames($name, $strict = false)
 		{
-			return self::_searchVlanNames($this->_IPAM, $name, $strict);
+			return self::_searchVlanNames($this->_adapter, $name, $strict);
 		}
 
 		public static function searchVlanNames($name, $strict = false)
@@ -243,40 +226,17 @@
 			return self::_searchVlanNames(null, $name, $strict);
 		}
 
-		protected static function _searchVlanNames(Main $IPAM = null, $name, $strict = false)
+		protected static function _searchVlanNames(Adapter $IPAM = null, $name, $strict = false)
 		{
 			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
+				$IPAM = self::_getAdapter();
 			}
 
-			if(self::cacheEnabled($IPAM)) {
-				$vlans = self::_getObjects($IPAM);
+			if(($vlans = self::_getSelfCache(self::OBJECT_TYPE, $IPAM)) !== false) {
 				return self::_searchObjects($vlans, self::FIELD_NAME, $name, $strict);
 			}
 			else {
 				return $IPAM->searchVlanName($name, $strict);
-			}
-		}
-
-		/**
-		  * @param Addon\Ipam\Main $IPAM
-		  * @return bool
-		  */
-		protected static function _setObjects(C\Addon\Adapter $IPAM = null)
-		{
-			if($IPAM === null) {
-				$IPAM = self::$_IPAM;
-			}
-
-			$id = $IPAM->getServerId();
-			$result = $IPAM->getAllVlans();
-
-			if($result !== false) {
-				self::$_objects[$id] = $result;
-				return true;
-			}
-			else {
-				return false;
 			}
 		}
 	}

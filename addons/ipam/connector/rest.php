@@ -8,6 +8,8 @@
 
 	class Connector_Rest extends Connector_Abstract
 	{
+		const METHOD = 'REST';
+
 		const REST_URN = array(
 			'user' => 'user',
 			'sections' => 'sections',
@@ -39,17 +41,7 @@
 		);
 
 		/**
-		  * @var string
-		  */
-		protected $_id;
-
-		/**
-		  * IPAM configuration
-		  * @var Core\Config
-		  */
-		protected $_config;
-
-		/**
+		  * IPAM server URL
 		  * @var string
 		  */
 		protected $_server;
@@ -65,26 +57,10 @@
 		  */
 		protected $_restAPI;
 
-		/**
-		  * @var bool
-		  */
-		protected $_debug = false;
 
-
-		public function __construct($id, $server, $application, $login, $password, $printInfoMessages = true, $debug = false)
+		public function __construct(Service $service, C\Config $config, $server, $application, $login, $password, $debug = false)
 		{
-			/**
-			  * Pourra servir plus tard pour sélectionner une configuration
-			  * différente en fonction de l'ID à partir de CONFIG
-			  */
-			$this->_id = $id;
-			$this->debug($debug);
-
-			$this->_config = C\Config::getInstance()->IPAM;
-
-			if($printInfoMessages) {
-				C\Tools::e(PHP_EOL."Connection HTTP à l'IPAM @ ".$server." veuillez patienter ... ", 'blue');
-			}
+			parent::__construct($service, $config, $debug);
 
 			$this->_server = rtrim($server, '/');
 			$this->_application = $application;
@@ -103,10 +79,6 @@
 			foreach(self::REST_URN as $key => $urn) {
 				$this->_initRestAPI($key, $this->_server, $this->_application, $urn, $httpProxy, $httpsProxy);
 				$this->_restAPI->{$key}->addHeader('token: '.$ipamApiToken);
-			}
-
-			if($printInfoMessages) {
-				C\Tools::e("[OK]", 'green');
 			}
 		}
 
@@ -150,7 +122,7 @@
 
 		public function getServerId()
 		{
-			return $this->_id;
+			return $this->getServiceId();
 		}
 
 		public function getServerUrl()
@@ -170,41 +142,7 @@
 			return $this->_server;
 		}
 
-		protected function _getCallResponse($json)
-		{
-			$response = json_decode($json, true);
-
-			if($this->_isValidResponse($response))
-			{
-				if(array_key_exists('data', $response)) {
-					return $response['data'];
-				}
-				elseif(array_key_exists('message', $response)) {
-					return $response['message'];
-				}
-			}
-
-			return false;
-		}
-
-		protected function _isValidResponse($response)
-		{
-			return (!$this->_isEmptyResponse($response) && !$this->_isErrorResponse($response));
-		}
-
-		protected function _isEmptyResponse($response)
-		{
-			return (C\Tools::is('string&&empty', $response) || C\Tools::is('array&&count==0', $response));
-		}
-
-		protected function _isErrorResponse($response)
-		{
-			return (
-				!is_array($response) || (array_key_exists('success', $response) && $response['success'] !== true) ||
-				!array_key_exists('code', $response) || !($response['code'] >= 200 && $response['code'] <= 299)
-			);
-		}
-
+		// =========== READER ============
 		public function resolvToLabel($objectType, $objectId)
 		{
 			switch($objectType)
@@ -376,18 +314,21 @@
 
 			foreach($vlanIds as $vlanId)
 			{
-				$items = $this->_restAPI->vlans->search->{$vlanId}->get();
-				$items = $this->_getCallResponse($items);
+				$vlans = $this->_restAPI->vlans->search->{$vlanId}->get();
+				$vlans = $this->_getCallResponse($vlans);
 
-				foreach($items as $item)
+				if($vlans !== false)
 				{
-					$vlanName = $item['name'];
-
-					foreach($environments as $environment)
+					foreach($vlans as $vlan)
 					{
-						if(preg_match('#^('.preg_quote($environment, "#").')[-_]#i', $vlanName)) {
-							$vlanNames[$vlanName] = $vlanId;
-							break(2);
+						$vlanName = $vlan['name'];
+
+						foreach($environments as $environment)
+						{
+							if(preg_match('#^('.preg_quote($environment, "#").')[-_]#i', $vlanName)) {
+								$vlanNames[$vlanName] = $vlanId;
+								break(2);
+							}
 						}
 					}
 				}
@@ -417,15 +358,18 @@
 				$equipments = $this->_restAPI->subnets->{$mcLagSubnet['id']}->addresses->get();
 				$equipments = $this->_getCallResponse($equipments);
 
-				foreach($equipments as $equipment)
+				if($equipments !== false)
 				{
-					$netMask = Tools::cidrMaskToNetMask($mcLagSubnet['mask']);
+					foreach($equipments as $equipment)
+					{
+						$netMask = Tools::cidrMaskToNetMask($mcLagSubnet['mask']);
 
-					$rowset[] = array(
-						'hostName' => $equipment['description'],
-						'iccp' => $equipment['ip'], 'address' => $equipment['ip'],
-						'cidrMask' => $mcLagSubnet['mask'], 'netMask' => $netMask,
-					);
+						$rowset[] = array(
+							'hostName' => $equipment['description'],
+							'iccp' => $equipment['ip'], 'address' => $equipment['ip'],
+							'cidrMask' => $mcLagSubnet['mask'], 'netMask' => $netMask,
+						);
+					}
 				}
 			}
 
@@ -693,7 +637,25 @@
 		{
 			if(C\Tools::is('int&&>0', $sectionId) && ($subnetId === false || C\Tools::is('int&&>=0', $subnetId)))
 			{
-				$subnets = $this->_restAPI->sections->{$sectionId}->subnets->get();
+				try {
+					$subnets = $this->_restAPI->sections->{$sectionId}->subnets->get();
+				}
+				catch(C\Exception $e)
+				{
+					$httpCode = $this->_restAPI->sections->getHttpCode();
+					$this->_restAPI->sections->setUrr(null);
+
+					switch($httpCode)
+					{
+						case 404: {
+							return array();
+						}
+						default: {
+							throw $e;
+						}
+					}
+				}
+
 				$subnets = $this->_getCallResponse($subnets);
 
 				if($subnets !== false)
@@ -725,10 +687,29 @@
 			if(C\Tools::is('int&&>0', $subnetId))
 			{
 				if($isFolder === true) {
-					$subnet = $this->_restAPI->folders->{$subnetId}->get();
+					$restAPI = $this->_restAPI->folders;
 				}
 				else {
-					$subnet = $this->_restAPI->subnets->{$subnetId}->get();
+					$restAPI = $this->_restAPI->subnets;
+				}
+
+				try {
+					$subnet = $restAPI->{$subnetId}->get();
+				}
+				catch(C\Exception $e)
+				{
+					$httpCode = $restAPI->getHttpCode();
+					$restAPI->setUrr(null);
+
+					switch($httpCode)
+					{
+						case 404: {
+							return false;
+						}
+						default: {
+							throw $e;
+						}
+					}
 				}
 
 				return $this->_getCallResponse($subnet);
@@ -996,13 +977,14 @@
 				$vlans = $this->_getCallResponse($vlans);
 
 				// @todo temporaire le temps de mettre à jour les controleurs custom
-				if(is_array($vlans))
+				/*if(is_array($vlans))
 				{
 					foreach($vlans as &$vlan) {
 						$vlan['id'] = $vlan['vlanId'];
 						unset($vlan['vlanId']);
 					}
-				}
+					unset($vlan);
+				}*/
 
 				return $vlans;
 			}
@@ -1107,7 +1089,10 @@
 				return false;
 			}
 		}
+		// ===============================
 
+		// =========== WRITER ============
+		// ----------- Address -----------
 		public function createAddress($subnetId, $address, $hostname, $description = '', $note = '', $port = '', $tag = self::ADDRESS_TAGS['online'])
 		{
 			if(!C\Tools::is('int&&>0', $subnetId) || !Tools::isIP($address)) {
@@ -1133,6 +1118,7 @@
 			catch(C\Exception $e)
 			{
 				$httpCode = $this->_restAPI->addresses->getHttpCode();
+				$this->_restAPI->addresses->setUrr(null);
 
 				switch($httpCode)
 				{
@@ -1177,6 +1163,7 @@
 			catch(C\Exception $e)
 			{
 				$httpCode = $this->_restAPI->addresses->getHttpCode();
+				$this->_restAPI->addresses->setUrr(null);
 
 				switch($httpCode)
 				{
@@ -1202,6 +1189,7 @@
 			catch(C\Exception $e)
 			{
 				$httpCode = $this->_restAPI->addresses->getHttpCode();
+				$this->_restAPI->addresses->setUrr(null);
 
 				switch($httpCode)
 				{
@@ -1214,6 +1202,45 @@
 			$result = $this->_getCallResponse($result);
 			return ($result !== false);
 		}
+		// -------------------------------
+		// ===============================
+
+		// ============ TOOL =============
+		protected function _getCallResponse($json)
+		{
+			$response = json_decode($json, true);
+
+			if($this->_isValidResponse($response))
+			{
+				if(array_key_exists('data', $response)) {
+					return $response['data'];
+				}
+				elseif(array_key_exists('message', $response)) {
+					return $response['message'];
+				}
+			}
+
+			return false;
+		}
+
+		protected function _isValidResponse($response)
+		{
+			return (!$this->_isEmptyResponse($response) && !$this->_isErrorResponse($response));
+		}
+
+		protected function _isEmptyResponse($response)
+		{
+			return (C\Tools::is('string&&empty', $response) || C\Tools::is('array&&count==0', $response));
+		}
+
+		protected function _isErrorResponse($response)
+		{
+			return (
+				!is_array($response) || (array_key_exists('success', $response) && $response['success'] !== true) ||
+				!array_key_exists('code', $response) || !($response['code'] >= 200 && $response['code'] <= 299)
+			);
+		}
+		// ===============================
 
 		/**
 		 * @param bool $debug

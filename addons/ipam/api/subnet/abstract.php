@@ -26,7 +26,7 @@
 			$sectionId = $this->getSectionId();
 
 			if($sectionId !== false) {
-				return $this->_IPAM->getSection($sectionId);
+				return $this->_adapter->getSection($sectionId);
 			}
 			else {
 				return false;
@@ -67,13 +67,13 @@
 
 			if($parentSubnetId !== false)
 			{
-				if(self::cacheEnabled($this->_IPAM))
+				if($this->_service->cache !== false && $this->_service->cache->isReady(static::OBJECT_TYPE))
 				{
-					$parentSubnets = Api_Folder::searchFolders('*', null, $this->getSectionId(), true, $this->_IPAM);
+					$parentSubnets = Api_Folder::searchFolders('*', null, $this->getSectionId(), true, $this->_adapter);
 					$parentSubnets = $this->_filterObjects($parentSubnets, Api_Folder::FIELD_ID, (string) $parentSubnetId);
 
 					if(count($parentSubnets) === 0) {
-						$parentSubnets = Api_Subnet::searchSubnets('*', null, null, null, $this->getSectionId(), true, $this->_IPAM);
+						$parentSubnets = Api_Subnet::searchSubnets('*', null, null, null, $this->getSectionId(), true, $this->_adapter);
 						$parentSubnets = $this->_filterObjects($parentSubnets, Api_Subnet::FIELD_ID, (string) $parentSubnetId);
 					}
 
@@ -83,10 +83,10 @@
 				}
 				else
 				{
-					$parentSubnet = $this->_IPAM->getFolder($parentSubnetId);
+					$parentSubnet = $this->_adapter->getFolder($parentSubnetId);
 
 					if($parentSubnet === false) {
-						$parentSubnet = $this->_IPAM->getSubnet($parentSubnetId);
+						$parentSubnet = $this->_adapter->getSubnet($parentSubnetId);
 					}
 
 					return $parentSubnet;
