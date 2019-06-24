@@ -14,10 +14,22 @@
 			$this->_orchestrator = Orchestrator::getInstance();
 		}
 
-		public function getByEquipLabel($equipLabel, $IPv = 4)
+		public function getByEquipLabelPortPresents($equipLabel, $portPresents = true, $IPv = 4, $strict = false)
 		{
 			$adapter = $this->_selectAdapter($equipLabel);
-			return $adapter->getByEquipLabel($equipLabel, $IPv);
+			return $adapter->getByEquipLabelPortPresents($equipLabel, $portPresents, $IPv, $strict);
+		}
+
+		public function getByEquipLabelPortLabel($equipLabel, $portLabel, $IPv = 4, $strict = false)
+		{
+			$adapter = $this->_selectAdapter($equipLabel);
+			return $adapter->getByEquipLabelPortLabel($equipLabel, $portLabel, $IPv, $strict);
+		}
+
+		public function getByEquipLabelVlanId($equipLabel, $vlanId, $IPv = 4)
+		{
+			$adapter = $this->_selectAdapter($equipLabel);
+			return $adapter->getByEquipLabelVlanId($equipLabel, $vlanId, $IPv);
 		}
 
 		public function getByEquipLabelVlanName($equipLabel, $vlanName, $IPv = 4)
@@ -29,13 +41,7 @@
 		public function getByEquipLabelVlanRegex($equipLabel, $vlanRegex, $IPv = 4)
 		{
 			$adapter = $this->_selectAdapter($equipLabel);
-			return $adapter->getByEquipLabelVlanName($equipLabel, $vlanRegex, $IPv);
-		}
-
-		public function getByEquipLabelPortLabel($equipLabel, $portLabel, $IPv = 4)
-		{
-			$adapter = $this->_selectAdapter($equipLabel);
-			return $adapter->getByEquipLabelPortLabel($equipLabel, $portLabel, $IPv);
+			return $adapter->getByEquipLabelVlanRegex($equipLabel, $vlanRegex, $IPv);
 		}
 
 		public function getGatewayByEquipLabelSubnetId($equipLabel, $subnetId)
@@ -73,25 +79,39 @@
 			return $adapter->getVrrpRowset($equipLabel, $subnetId, $IPv);
 		}
 
-		public function getNmi($hostName, $gateway = true)
+		/**
+		  * @param string $hostName
+		  * @param bool $gateway
+		  * @param int $IPv IP version 4 or 6
+		  * @return false|array
+		  */
+		public function getNmi($hostName, $gateway = true, $IPv = 4)
 		{
 			$adapter = $this->_selectAdapter($hostName);
 
 			$vlanName = '[-_](nmi)$';	// /!\ Arg 2 doit être passé par référence
-			$mgmtDatas = $adapter->getByEquipLabelVlanRegex($hostName, $vlanName, 4);
+			$mgmtDatas = $adapter->getByEquipLabelVlanRegex($hostName, $vlanName, $IPv);
 
-			if($gateway === true)
+			if(count($mgmtDatas) > 0)
 			{
-				$mgmtDatas['gateway'] = $adapter->getGatewayBySubnetId($mgmtDatas);
+				$mgmtDatas = current($mgmtDatas);	// Compatible adressage unique
 
-				if($mgmtDatas['gateway'] === false) {
-					throw new Exception("Impossible de récupérer l'IP de la Gateway depuis l'IPAM pour '".$hostName."'", E_USER_ERROR);
+				if($gateway === true)
+				{
+					$mgmtDatas['gateway'] = $adapter->getGatewayBySubnetId($mgmtDatas);
+
+					if($mgmtDatas['gateway'] === false) {
+						throw new Exception("Impossible de récupérer l'IP de la Gateway depuis l'IPAM pour '".$hostName."'", E_USER_ERROR);
+					}
+
+					unset($mgmtDatas['subnetId']);
 				}
 
-				unset($mgmtDatas['subnetId']);
+				return $mgmtDatas;
 			}
-
-			return $mgmtDatas;
+			else {
+				return false;
+			}
 		}
 
 		protected function _selectService($hostName)

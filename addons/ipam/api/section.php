@@ -96,7 +96,7 @@
 					$sectionId = $this->_getField('masterSection', 'int&&>=0');
 
 					if($this->objectIdIsValid($sectionId)) {
-						$sectionApi = new Api_Section($sectionId);
+						$sectionApi = new Api_Section($sectionId, $this->_service);
 						$this->_path = $sectionApi->getPaths(true);
 					}
 					else {
@@ -144,7 +144,7 @@
 		public function getSubSectionApi($sectionName)
 		{
 			$sectionId = $this->getSubSectionId($sectionName);
-			return ($sectionId !== false) ? (new self($sectionId)) : (false);
+			return ($sectionId !== false) ? (new self($sectionId, $this->_service)) : (false);
 		}
 
 		public function getSubSections($sectionName = null)
@@ -187,7 +187,7 @@
 		public function getFolderApi($folderName)
 		{
 			$folderId = $this->getFolderId($folderName);
-			return ($folderId !== false) ? (new Api_Folder($folderId)) : (false);
+			return ($folderId !== false) ? (new Api_Folder($folderId, $this->_service)) : (false);
 		}
 
 		public function getFolders($folderName = null)
@@ -240,7 +240,7 @@
 		public function getSubnetApi($subnetName)
 		{
 			$subnetId = $this->getSubnetId($subnetName);
-			return ($subnetId !== false) ? (new Api_Subnet($subnetId)) : (false);
+			return ($subnetId !== false) ? (new Api_Subnet($subnetId, $this->_service)) : (false);
 		}
 
 		public function getSubnets($subnetName = null)

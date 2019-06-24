@@ -1,6 +1,10 @@
 <?php
-	define("ROOT_DIR", __DIR__);
-	define("APP_DIR", __DIR__ . '/applications/ipam');
+	define("WORKING_ROOT_DIR", __DIR__);
+	define("PROJECT_ROOT_DIR", WORKING_ROOT_DIR);
+	define("APPLICATION_ROOT_DIR", PROJECT_ROOT_DIR.'/applications/dcim');
+
+	define("ROOT_DIR", WORKING_ROOT_DIR);
+	define("APP_DIR", APPLICATION_ROOT_DIR);
 
 	if(!isset($configurations))
 	{

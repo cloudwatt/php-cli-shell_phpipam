@@ -177,7 +177,16 @@
 			return ($response !== false) ? ($response[$fieldName]) : (false);
 		}
 
-		protected function _apiGetEquipPort($equipLabel, $portLabel = null, $IPv = 4)
+		/**
+		  * @param string $equipLabel
+		  * @param string $portLabel
+		  * @param bool $level2 Return level 2 (vlan) informations
+		  * @param bool $level3 Return level 3 (ip) informations
+		  * @param int $IPv IP version, 4 or 6
+		  * @param bool $strict Require or not level informations
+		  * @return array
+		  */
+		protected function _apiGetEquipPort($equipLabel, $portLabel = null, $level2 = true, $level3 = true, $IPv = 4, $strict = false)
 		{
 			$args = array();
 			$args['description'] = $equipLabel;
@@ -191,7 +200,7 @@
 				return array();
 			}
 
-			$vars = array();
+			$items = array();
 
 			foreach($addresses as $address)
 			{
@@ -202,54 +211,115 @@
 
 				if($subnet !== false)
 				{
-					$netMask = Tools::cidrMaskToNetMask($subnet['mask']);
+					$hasLevel2 = false;
+					$hasLevel3 = false;
 
-					$vars[] = array(
-						'portName' => $address['port'],
-						'address' => $address['ip'],
-						'netMask' => $netMask,
-						'cidrMask' => $subnet['mask'],
-						'subnetId' => (int) $subnetId,
-						'__vlanId__' => $subnet['vlanId'],
+					$item = array(
+						'portName' => $address['port']
 					);
-				}
-			}
 
-			return $vars;
-		}
+					if($level3)
+					{
+						$netMask = Tools::cidrMaskToNetMask($subnet['mask'], $IPv);
 
-		protected function _apiGetEquipVlan($equipLabel, $portLabel = null, $IPv = 4)
-		{
-			$vars = array();
-			$addresses = $this->_apiGetEquipPort($equipLabel, $portLabel, $IPv);
+						$item['address'] = $address['ip'];
+						$item['netMask'] = $netMask;
+						$item['cidrMask'] = $subnet['mask'];
+						$item['subnetId'] = (int) $subnetId;
 
-			foreach($addresses as $address)
-			{
-				//VLAN
-				$vlanId = $address['__vlanId__'];
+						$hasLevel3 = true;
+					}
 
-				if(C\Tools::is('int&&>0', $vlanId))
-				{
-					$vlan = $this->_restAPI->vlans->{$vlanId}->get();
-					$vlan = $this->_getCallResponse($vlan);
+					if($level2)
+					{
+						if(C\Tools::is('int&&>0', $subnet['vlanId']))
+						{
+							$vlan = $this->_restAPI->vlans->{$subnet['vlanId']}->get();
+							$vlan = $this->_getCallResponse($vlan);
 
-					if($vlan !== false) {
-						$address['vlanId'] = $vlan['number'];
-						$address['vlanName'] = $vlan['name'];
-						unset($address['__vlanId__']);
-						$vars[] = $address;
+							if($vlan !== false) {
+								$item['vlanId'] = $vlan['number'];
+								$item['vlanName'] = $vlan['name'];
+								$hasLevel2 = true;
+							}
+						}
+
+						/**
+						  * Puisque $level2 === true alors on doit toujours fournir les informations de level 2
+						  * même si celles-ci n'existent pas afin d'éviter de devoir faire un array_key_exists
+						  */
+						if(!$hasLevel2) {
+							$item['vlanId'] = null;
+							$item['vlanName'] = null;
+						}
+					}
+
+					if(!$strict || ((!$level2 || $hasLevel2) && (!$level3 || $hasLevel3))) {
+						$items[] = $item;
 					}
 				}
 			}
 
-			return $vars;
+			return $items;
 		}
 
-		public function getByEquipLabel($equipLabel, $IPv = 4)
+		/**
+		  * @param string $equipLabel
+		  * @param bool $portPresents
+		  * @param int $IPv IP version, 4 or 6
+		  * @param boot $strict Require or not level informations
+		  * @return array Return a set of IPAM informations
+		  */
+		public function getByEquipLabelPortPresents($equipLabel, $portPresents = true, $IPv = 4, $strict = false)
 		{
-			return $this->_apiGetEquipVlan($equipLabel, '##present##', $IPv);
+			$port = '##present##';
+
+			if(!$portPresents) {
+				$port = '##not##'.$port;
+			}
+
+			return $this->_apiGetEquipPort($equipLabel, $port, true, true, $IPv, $strict);
 		}
 
+		/**
+		  * @param string $equipLabel
+		  * @param string $portLabel
+		  * @param int $IPv IP version, 4 or 6
+		  * @param boot $strict Require or not level informations
+		  * @return array Return a set of IPAM informations
+		  */
+		public function getByEquipLabelPortLabel($equipLabel, $portLabel, $IPv = 4, $strict = false)
+		{
+			return $this->_apiGetEquipPort($equipLabel, $portLabel, true, true, $IPv, $strict);
+		}
+
+		/**
+		  * @param string $equipLabel
+		  * @param int $vlanId
+		  * @param int $IPv IP version, 4 or 6
+		  * @return array Return a set of IPAM informations
+		  */
+		public function getByEquipLabelVlanId($equipLabel, $vlanId, $IPv = 4)
+		{
+			// Strict true indispensable afin de garantir la présence du champs vlanId
+			$items = $this->_apiGetEquipPort($equipLabel, null, true, true, $IPv, true);
+
+			foreach($items as $index => $item)
+			{
+				if($vlanId !== $item['vlanId']) {
+					unset($items[$index]);
+				}
+			}
+
+			return $items;
+		}
+
+		/**
+		  * @param string $equipLabel
+		  * @param string $vlanName
+		  * @param int $IPv IP version, 4 or 6
+		  * @return array Return a set of IPAM informations
+		  */
 		public function getByEquipLabelVlanName($equipLabel, $vlanName, $IPv = 4)
 		{
 			$vlanName = preg_quote($vlanName, '#');
@@ -258,24 +328,25 @@
 			return $this->getByEquipLabelVlanRegex($equipLabel, $vlanName, $IPv);
 		}
 
+		/**
+		  * @param string $equipLabel
+		  * @param string $vlanRegex
+		  * @param int $IPv IP version, 4 or 6
+		  * @return array Return a set of IPAM informations
+		  */
 		public function getByEquipLabelVlanRegex($equipLabel, $vlanRegex, $IPv = 4)
 		{
-			$items = $this->_apiGetEquipVlan($equipLabel, null, $IPv);
+			// Strict true indispensable afin de garantir la présence du champs vlanName
+			$items = $this->_apiGetEquipPort($equipLabel, null, true, true, $IPv, true);
 
-			foreach($items as $item)
+			foreach($items as $index => $item)
 			{
-				if(preg_match('#'.$vlanRegex.'#i', $item['vlanName'])) {
-					return $item;
+				if(!preg_match('#'.$vlanRegex.'#i', $item['vlanName'])) {
+					unset($items[$index]);
 				}
 			}
 
-			return false;
-		}
-
-		public function getByEquipLabelPortLabel($equipLabel, $portLabel, $IPv = 4)
-		{
-			$items = $this->_apiGetEquipVlan($equipLabel, $portLabel, $IPv);
-			return (count($items) > 0) ? ($items[0]) : (false);
+			return $items;
 		}
 
 		public function getGatewayBySubnetId($subnetId)
@@ -340,7 +411,7 @@
 		public function getMcLagRowset($hostName, $portName, $IPv = 4)
 		{
 			$rowset = array();
-			$addresses = $this->_apiGetEquipPort($hostName, $portName, $IPv);
+			$addresses = $this->_apiGetEquipPort($hostName, $portName, false, true, $IPv, true);
 
 			foreach($addresses as $address)
 			{
@@ -362,7 +433,7 @@
 				{
 					foreach($equipments as $equipment)
 					{
-						$netMask = Tools::cidrMaskToNetMask($mcLagSubnet['mask']);
+						$netMask = Tools::cidrMaskToNetMask($mcLagSubnet['mask'], $IPv);
 
 						$rowset[] = array(
 							'hostName' => $equipment['description'],
@@ -411,7 +482,7 @@
 
 				if($subnet !== false)
 				{
-					$netMask = Tools::cidrMaskToNetMask($subnet['mask']);
+					$netMask = Tools::cidrMaskToNetMask($subnet['mask'], $IPv);
 
 					$rowset[] = array(
 						'note' => $address['note'],
@@ -469,6 +540,22 @@
 			}
 
 			return false;
+		}*/
+
+		/*protected function _getSections($sectionId = null)
+		{
+			if(C\Tools::is('int&&>=0', $sectionId))
+			{
+				$args = array();
+				$args['filter_by'] = 'masterSection';
+				$args['filter_value'] = $sectionId;
+
+				$sections = $this->_restAPI->sections->get($args);
+				return $this->_getCallResponse($sections);
+			}
+			else {
+				return false;
+			}
 		}*/
 		
 		protected function _getSections($sectionId = null)

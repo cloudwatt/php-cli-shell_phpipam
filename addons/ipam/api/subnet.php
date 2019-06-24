@@ -419,10 +419,10 @@
 		  * @param int $folderId Folder ID
 		  * @param int $sectionId Section ID
 		  * @param bool $strict
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @return false|array
 		  */
-		public static function searchSubnets($subnet, $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false, Main $IPAM = null)
+		public static function searchSubnets($subnet, $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false, Adapter $IPAM = null)
 		{
 			return self::_searchSubnets($IPAM, $subnet, $IPv, $subnetId, $folderId, $sectionId, $strict);
 		}
@@ -430,7 +430,7 @@
 		/**
 		  * Return all sections matches request
 		  *
-		  * @param Addon\Ipam\Main $IPAM IPAM connector
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
 		  * @param string $subnet Subnet CIDR or name, wildcard * is allowed
 		  * @param int $IPv IP version, 4 or 6
 		  * @param int $subnetId Subnet ID
@@ -439,7 +439,7 @@
 		  * @param bool $strict
 		  * @return false|array
 		  */
-		protected static function _searchSubnets(Main $IPAM = null, $subnet = '*', $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
+		protected static function _searchSubnets(Adapter $IPAM = null, $subnet = '*', $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
 				$IPAM = self::_getAdapter();
@@ -463,8 +463,18 @@
 			return self::_searchCidrSubnets(null, $subnet, $subnetId, $folderId, $sectionId, $strict);
 		}
 
-		// $strict for future use
-		protected static function _searchCidrSubnets(Main $IPAM = null, $subnet = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
+		/**
+		  * @param Addon\Ipam\Adapter $IPAM IPAM adapter
+		  * @param string $subnet
+		  * @param int $subnetId
+		  * @param int $folderId
+		  * @param int $sectionId
+		  * @param bool $strict
+		  * @return false|array Subnets
+		  *
+		  * $strict for future use
+		  */
+		protected static function _searchCidrSubnets(Adapter $IPAM = null, $subnet = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
 				$IPAM = self::_getAdapter();
@@ -532,7 +542,7 @@
 			return self::_searchSubnetNames(null, $name, $IPv, $subnetId, $folderId, $sectionId, $strict);
 		}
 
-		protected static function _searchSubnetNames(Main $IPAM = null, $name = '*', $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
+		protected static function _searchSubnetNames(Adapter $IPAM = null, $name = '*', $IPv = null, $subnetId = null, $folderId = null, $sectionId = null, $strict = false)
 		{
 			if($IPAM === null) {
 				$IPAM = self::_getAdapter();
