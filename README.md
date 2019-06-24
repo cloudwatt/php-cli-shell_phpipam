@@ -46,14 +46,14 @@ Download last PHAR release and its key from [releases](https://github.com/cloudw
 
 ![wizard](documentation/readme/wizard.gif)
 
-Wizard help:
+Print wizard help:  
 `$ php php-cli-shell.phar --help`
 
-Create PHPIPAM configuration with command:
+Create PHPIPAM configuration with command:  
 `$ php php-cli-shell.phar configuration:application:factory ipam`  
 *For more informations about configuration file, see 'CONFIGURATION FILE' section*
 
-Create PHPIPAM launcher with command:
+Create PHPIPAM launcher with command:  
 `$ php php-cli-shell.phar launcher:application:factory ipam`
 
 __*The PHAR contains all PHP-CLI SHELL components (Base, DCIM, IPAM and Firewall)*__
