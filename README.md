@@ -1,6 +1,8 @@
 PHP-CLI SHELL for PHPIPAM
 -------------------
 
+__New release will be only available on https://github.com/Renji-FR/PhpCliShell__
+
 This repository is the addon for PHP-CLI SHELL about PHPIPAM service.  
 You have to use base PHP-CLI SHELL project that is here: https://github.com/cloudwatt/php-cli-shell_base
 
